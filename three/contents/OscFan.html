@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta name="Author" content="Sakamoto Takashi">
+		<title>Oscillating fan</title>
+		<style>
+		body		{ font-size: 120%; }
+		#control	{ position: absolute; top: 5px; left: 5px; z-index: 1; }
+		#canvas		{ position: absolute; top: 0px; left: 0px; z-index: 0; }
+		</style>
+	</head>
+	<body>
+		<div id="control">
+			<button id="level0">停止</button><button id="level1">弱</button><button id="level2">強</button>
+			<span style="padding-left: 10px; padding-right: 5px;"><button id="shake">首振り</button></span>
+			<span style="padding-left: 20px; padding-right: 10px;">上下</span><input id="angle" type="range" min="-0.25" max="0.25" step="0.01" style="width: 240px;" value="0">
+		</div> 
+		<div id="canvas" style="width: 100%; height: 100%;"></div>
+		<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+		<script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+		<script>
+		function getShape(path) {
+			let elem = path.match(/[A-Za-z]|-?\d+(\.\d+)?/g);
+			if (elem.length == 0) { throw new Error(); }
+			const shape = new THREE.Shape();
+			let index = 0;
+			while (index < elem.length) {
+				let token = elem[index++];
+				switch (token) {
+				case 'M':
+					if (index + 2 > elem.length) { throw new Error(); }
+					shape.moveTo(Number(elem[index]), Number(elem[index+1]));
+					index += 2;
+					break;
+				case 'L':
+					if (index + 2 > elem.length) { throw new Error(); }
+					shape.lineTo(Number(elem[index]), Number(elem[index+1]));
+					index += 2;
+					break;
+				case 'C':
+					if (index + 6 > elem.length) { throw new Error(); }
+					shape.bezierCurveTo(Number(elem[index]), Number(elem[index+1]), Number(elem[index+2]), Number(elem[index+3]), Number(elem[index+4]), Number(elem[index+5]));
+					index += 6;
+					break;
+				case 'Z':
+					shape.closePath();
+					break;
+				default:
+					console.log('ignore: ' + token);
+					break;
+				}
+			}
+			return shape;
+		}
+		function getPoints(data) {
+			const points = [];
+			data.forEach((datum) => points.push(new THREE.Vector2(datum[0], datum[1])));
+			return points;
+		}
+
+		class OscFan {
+			#geometries = new Map();
+			initGeometries() {
+				this.#geometries.set('G_Sphere',			new THREE.SphereGeometry(1, 64, 32));
+				this.#geometries.set('G_Cylinder',			new THREE.CylinderGeometry(1, 1, 1, 64));
+				this.#geometries.set('G_Cylinder2',			new THREE.CylinderGeometry(1, 1.25, 1, 64));
+				this.#geometries.set('G_Cylinder3',			new THREE.CylinderGeometry(1, 1.2, 1, 64));
+				this.#geometries.set('G_Box',				new THREE.BoxGeometry(1, 1, 1));
+				const bladePath = "M0,10 C10,12 85,15 90,10 C95,5 95,-20 90,-25 C85,-30 10,-8 0,-10 Z";
+				this.#geometries.set('G_FanBlade',			new THREE.ExtrudeGeometry(getShape(bladePath), {steps: 1, curveSegments: 32, depth: 2}));
+				const basePath = "M-30,-20 L30,-20 C60,-20 60,20 30,20 L-30,20 C-60,20 -60,-20 -30,-20 Z";
+				this.#geometries.set('G_Base',				new THREE.ExtrudeGeometry(getShape(basePath), {steps: 1, curveSegments: 32, depth: 10}));
+				this.#geometries.set('G_FrontCoverFrame',	new THREE.LatheGeometry(getPoints([[99, 2], [99, -2], [102, -2], [102, 2], [99, 2]]), 64));
+				this.#geometries.set('G_OuterFrameFrame',	new THREE.LatheGeometry(getPoints([[102, 2], [102, -2], [107, -2], [107, 2], [102, 2]]), 64));
+			}
+			getGeometry(id) {
+				const geometry = this.#geometries.get(id);
+				if (geometry == null || geometry == undefined) { console.log('geometry not found: ' + id); }
+				return geometry;
+			}
+			#materials = new Map();
+			initMaterials() {
+				this.#materials.set('M_FanBlade',	new THREE.MeshStandardMaterial({color: 0x8080ff, metalness: 0.2, roughness: 0.5, transparent: true, opacity: 0.7}));
+				this.#materials.set('M_White',		new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 0.2, roughness: 0.5}));
+				this.#materials.set('M_Gray',		new THREE.MeshStandardMaterial({color: 0xc0c0c0, metalness: 0.2, roughness: 0.5}));
+			}
+			getMaterial(id) {
+				const material = this.#materials.get(id);
+				if (material == null || material == undefined) { console.log('material not found: ' + id); }
+				return material;
+			}
+			getFrontCoverFrame() { return new THREE.Mesh(this.getGeometry('G_FrontCoverFrame'), this.getMaterial('M_White')); }
+			getFrontCoverSpoke() {
+				const mesh = new THREE.Group();
+				const mesh1 = new THREE.Mesh(this.getGeometry('G_Box'), this.getMaterial('M_White'));
+				mesh1.scale.set(80, 2, 2);
+				mesh1.position.set(60, 0.5, 0);
+				mesh.add(mesh1);
+				return mesh;
+			}
+			getFrontCoverTop() {
+				const mesh = new THREE.Mesh(this.getGeometry('G_Cylinder'), this.getMaterial('M_White'));
+				mesh.scale.set(30, 2, 30);
+				return mesh;
+			}
+			getFrontCover(num = 48) {
+				const mesh = new THREE.Group();
+				for (let i = 0; i < num; ++i) {
+					const spoke = this.getFrontCoverSpoke();
+					spoke.rotation.set(0, Math.PI*2*i/num, 0);
+					mesh.add(spoke);
+				}
+				mesh.add(this.getFrontCoverFrame());
+				mesh.add(this.getFrontCoverTop());
+				return mesh;
+			}
+			getFanBlade() {
+				const mesh = new THREE.Group();
+				const mesh1 = new THREE.Mesh(this.getGeometry('G_FanBlade'), this.getMaterial('M_FanBlade'));
+				mesh1.rotation.set(0.5, 0, 0);
+				mesh.add(mesh1);
+				return mesh;
+			}
+			getFanCenter() {
+				const mesh = new THREE.Mesh(this.getGeometry('G_Cylinder'), this.getMaterial('M_White'));
+				mesh.scale.set(25, 20, 25);
+				mesh.rotation.set(Math.PI/2, 0, 0);
+				return mesh;
+			}
+			getFanBlades(num = 5) {
+				const mesh = new THREE.Group();
+				for (let i = 0; i < num; ++i) {
+					const blade = this.getFanBlade();
+					blade.rotation.set(0, 0, Math.PI*2*i/num);
+					mesh.add(blade);
+				}
+				mesh.add(this.getFanCenter());
+				return mesh;
+			}
+			getOuterFrameFrame() { return new THREE.Mesh(this.getGeometry('G_OuterFrameFrame'), this.getMaterial('M_White')); }
+			getOuterFrameSpoke() {
+				const mesh = new THREE.Group();
+				const mesh1 = new THREE.Mesh(this.getGeometry('G_Box'), this.getMaterial('M_White'));
+				mesh1.scale.set(2, 40, 2);
+				mesh1.position.set(105, 20, 0);
+				mesh.add(mesh1);
+				const mesh2 = new THREE.Mesh(this.getGeometry('G_Box'), this.getMaterial('M_White'));
+				mesh2.scale.set(100, 2, 2);
+				mesh2.rotation.set(0, 0, -0.2);
+				mesh2.position.set(56.5, 49, 0);
+				mesh.add(mesh2);
+				return mesh;
+			}
+			getOuterFrameCenter() {
+				const mesh = new THREE.Group();
+				const mesh1 = new THREE.Mesh(this.getGeometry('G_Cylinder2'), this.getMaterial('M_White'));
+				mesh1.scale.set(20, 70, 20);
+				mesh.add(mesh1);
+				const mesh2 = new THREE.Mesh(this.getGeometry('G_Sphere'), this.getMaterial('M_White'));
+				mesh2.scale.set(20, 20, 20);
+				mesh2.position.set(0, 35, 0);
+				mesh.add(mesh2);
+				mesh.position.set(0, 70, 0);
+				return mesh;
+			}
+			getOuterFrame(num = 48) {
+				const mesh = new THREE.Group();
+				for(let i = 0; i < num; ++i) {
+					const spoke = this.getOuterFrameSpoke();
+					spoke.rotation.set(0, Math.PI*2*i/num, 0);
+					mesh.add(spoke);
+				}
+				mesh.add(this.getOuterFrameFrame());
+				mesh.add(this.getOuterFrameCenter());
+				return mesh;
+			}
+			getJoint() {
+				const mesh = new THREE.Mesh(this.getGeometry('G_Sphere'), this.getMaterial('M_Gray'));
+				mesh.scale.set(9.5, 9.5, 9.5);
+				return mesh;
+			}
+			getBase() {
+				const mesh = new THREE.Group();
+				const mesh1 = new THREE.Mesh(this.getGeometry('G_Cylinder3'), this.getMaterial('M_White'));
+				mesh1.scale.set(10, 110, 10);
+				mesh1.position.set(0, -55, -40);
+				mesh.add(mesh1);
+				const mesh2 = new THREE.Mesh(this.getGeometry('G_Base'), this.getMaterial('M_White'));
+				mesh2.scale.set(1, 1.5, 1);
+				mesh2.rotation.set(Math.PI/2, 0, Math.PI/2);
+				mesh2.position.set(0, -105, -20);
+				mesh.add(mesh2);
+				const mesh3 = new THREE.Mesh(this.getGeometry('G_Cylinder'), this.getMaterial('M_Gray'));
+				mesh3.scale.set(80, 10, 80);
+				mesh3.position.set(0, -120, -10);
+				mesh.add(mesh3);
+				return mesh;
+			}
+			setObject() {
+				this.object = new THREE.Group();
+				this.head = new THREE.Group();
+				const frontCover = this.getFrontCover(48);
+				frontCover.rotation.set(-Math.PI/2, 0, 0);
+				frontCover.position.set(0, 25, 85);
+				this.head.add(frontCover);
+				this.blades = this.getFanBlades(5);
+				this.blades.position.set(0, 25, 65);
+				this.head.add(this.blades);
+				const outerFrame = this.getOuterFrame(48);
+				outerFrame.rotation.set(-Math.PI/2, 0, 0);
+				outerFrame.position.set(0, 25, 85);
+				this.head.add(outerFrame);
+				this.head.add(this.getJoint());
+				this.head.position.set(0, -5, -65);
+				this.object.add(this.head);
+				const base = this.getBase();
+				base.position.set(0, -5, -25);
+				this.object.add(base);
+			}
+			#speed = 0;
+			#shakeDir = -1;
+			#maxSpeed = 0;
+			#shake = false;
+			#shakeAngle = 0.8;
+			constructor() {
+				this.initGeometries();
+				this.initMaterials();
+				this.setObject();
+			}
+			setMaxSpeed(speed) { this.#maxSpeed = speed; }
+			getShake() { return this.#shake; }
+			setShake(flag) { this.#shake = flag; }
+			setHeadAngle(angle) { this.head.rotation.x = angle; }
+			animate() {
+				function calcShakeDelta(angle) { return (angle > 0.2)?0.006:(0.001+0.005*angle*5); }
+				
+				this.#speed += (this.#maxSpeed != 0)?0.002:-0.002;
+				if		(this.#maxSpeed > 0  && this.#speed > this.#maxSpeed) { this.#speed = this.#maxSpeed; }
+				else if (this.#maxSpeed == 0 && this.#speed < this.#maxSpeed) { this.#speed = 0; }
+				
+				this.blades.rotation.z -= this.#speed;
+				if (!this.#shake) { return; }
+
+				if (this.#shakeDir == 1) {
+					this.head.rotation.y += this.#speed*calcShakeDelta(this.#shakeAngle-Math.abs(this.head.rotation.y));
+					if (this.head.rotation.y >  this.#shakeAngle) { this.#shakeDir = -1; }
+				}
+				else if (this.#shakeDir == -1) {
+					this.head.rotation.y -= this.#speed*calcShakeDelta(this.#shakeAngle-Math.abs(this.head.rotation.y));
+					if (this.head.rotation.y < -this.#shakeAngle) { this.#shakeDir =  1; }
+				}
+			}
+			getObject() { return this.object; }
+		}
+
+		const canvas = document.querySelector('#canvas');
+		function getWidth()  { return canvas.getBoundingClientRect().width; }
+		function getHeight() { return canvas.getBoundingClientRect().height; }
+		const scene = new THREE.Scene();
+		const directionLight = new THREE.DirectionalLight(0xffffff, 1);
+		directionLight.position.set(1, 1, 1);
+		directionLight.target.position.set(0, 0, 0);
+		scene.add(directionLight);
+		scene.add(new THREE.AmbientLight(0x999999, 1));
+		const oscFan = new OscFan();
+		scene.add(oscFan.getObject());
+		const renderer = new THREE.WebGLRenderer();
+		renderer.setSize(getWidth(), getHeight());
+		renderer.setClearColor(0xdddddd);
+		canvas.appendChild(renderer.domElement);
+		const camera = new THREE.PerspectiveCamera(60, getWidth()/getHeight(), 0.1, 1000);
+		camera.position.set(0, 0, 320);
+		const controls = new THREE.OrbitControls(camera, renderer.domElement);
+		Object.assign(controls, {
+			rotateSpeed: 0.2, enableDamping: true, dampingFactor: 0.05, enablePan: false, enableZoom: false,
+			minPolarAngle: Math.PI/2, maxPolarAngle: 0, minAzimuthAngle: -Math.PI/4, maxAzimuthAngle: Math.PI/4
+		});
+		controls.target = new THREE.Vector3(0, 0, 0);
+		function animate() {
+			renderer.setSize(getWidth(), getHeight());
+			requestAnimationFrame(animate);
+			controls.update();
+			oscFan.animate();
+			renderer.render(scene, camera);
+		}
+		document.querySelector('#level0')	.addEventListener('click', () => oscFan.setMaxSpeed(0));
+		document.querySelector('#level1')	.addEventListener('click', () => oscFan.setMaxSpeed(0.2));
+		document.querySelector('#level2')	.addEventListener('click', () => oscFan.setMaxSpeed(0.5));
+		document.querySelector('#shake')	.addEventListener('click', () => oscFan.setShake(!oscFan.getShake()));
+		const angle = document.querySelector('#angle');
+		angle.addEventListener('input', () => oscFan.setHeadAngle(angle.value));
+		animate();
+		</script>
+	</body>
+</html>

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Ppoiの生態8</title>
+		<style>body { margin: 0; }</style>
+	</head>
+	<body>
+		<h1>土星の輪が観測されました<hr/></h1>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/109/three.min.js"></script>
+		<script>
+			const [WSEG, HSEG] = [64, 32];
+			const sphereGeometry = new THREE.SphereGeometry(1, WSEG, HSEG);
+			const cylinderGeometry = new THREE.CylinderGeometry(1.2, 0.8, 10.0, WSEG, 1, false); 
+			const materialMap = new Map();
+			function createMaterial(color) {
+				let material = materialMap.get(color);
+				if (material == null) {
+					material = new THREE.MeshStandardMaterial({color: color});
+					materialMap.set(color, material);
+				}
+				return material;
+			}
+			
+			const renderer = new THREE.WebGLRenderer();
+			const scene = new THREE.Scene();
+			const camera = createCamera();
+			const MAX_PPOIS = 800;
+			const ppois1 = createPpoiEx(MAX_PPOIS, 16, 5);
+			const ppois2 = createPpoiEx(MAX_PPOIS, 23, 5);
+			
+			function createPpoi() {
+				const ppoi = new THREE.Group();
+				const body  = new THREE.Mesh(sphereGeometry, createMaterial(0x9696c8));
+				body.scale.set(8, 10, 4); 
+				body.position.set ( 0.0,   0.0,  0.0);
+				const lEye  = new THREE.Mesh(sphereGeometry, createMaterial(0x646496));
+				lEye.rotation.set(-0.2, -0.3, 0);
+				lEye.scale.set(3.6, 4.5, 1.8);
+				lEye.position.set (-4.0,   4.0,  2.0);
+				const rEye  = new THREE.Mesh(sphereGeometry, createMaterial(0x646496));
+				rEye.rotation.set(-0.2, 0.3, 0);
+				rEye.scale.set(3.6, 4.5, 1.8); 
+				rEye.position.set ( 4.0,   4.0,  2.0);
+				const tail  = new THREE.Mesh(cylinderGeometry, createMaterial(0x303030));
+				tail.position.set ( 0.0, -11.0, -1.0);
+				const tail2 = new THREE.Mesh(sphereGeometry, createMaterial(0x303030));
+				tail2.scale.set(0.8, 0.8, 0.8);
+				tail2.position.set( 0.0, -16.0, -1.0);
+				ppoi.add(body, lEye, rEye, tail, tail2);
+				return ppoi;
+			}
+			function createLight() {
+				const light = new THREE.DirectionalLight(0xffffff, 2);
+				light.position.set(1, 1, 1);
+				return light;
+			}
+			function createAmbientLight() { return new THREE.AmbientLight(0x999999, 2.0); }
+			function createBackground() {
+				const R = 3000;
+				const SIZE = 3000;
+				const pos = [];
+				for (let i = 0; i < SIZE; ++i) { pos.push(R*(Math.random()-0.5), R*(Math.random()-0.5), R*(Math.random()-0.5)); }
+				const geometry = new THREE.BufferGeometry();
+				geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+				const material = new THREE.PointsMaterial({size:0.1, color:0xffffff});
+				return new THREE.Points(geometry, material);
+			}
+			function getWidth() { return window.innerWidth; }
+			function getHeight() { return window.innerHeight; }
+			function createCamera() {
+				const camera = new THREE.PerspectiveCamera(75, getWidth() / getHeight(), 1, 5000);
+				camera.position.set(25.5, -1000, 1);
+				camera.lookAt(new THREE.Vector3(26, 0, 0));
+				return camera;
+			}
+			function createSphere() {
+				const sphere = new THREE.Mesh(sphereGeometry, createMaterial(0xdeb887));;
+				sphere.scale.set(6, 6, 6); 
+				return sphere;
+			}
+			function createPpoiEx(num, r, width) {
+				const result = new THREE.Group();
+				for (let i = 0; i < num; ++i) { 
+					const ppoi = createPpoi();
+					ppoi.scale.set(0.02, 0.02, 0.02);
+					const theta = Math.random()*Math.PI*2;
+					const distance = r + Math.random()*width;
+					ppoi.rotation.set(0, 0, theta);
+					ppoi.position.set(distance*Math.cos(theta), distance*Math.sin(theta), 0);
+					result.add(ppoi);
+				}
+				return result;
+			}
+			function animate() {
+				ppois1.rotation.z += 0.01;
+				ppois2.rotation.z += 0.007;
+				let delta = camera.position.y / 200;
+				if (delta > -0.1) { delta = -0.1; }
+				camera.position.y -= delta;
+				camera.lookAt(new THREE.Vector3(26, 0, 0));
+				renderer.render(scene, camera);
+				requestAnimationFrame(animate);
+			}
+			function main() {
+				renderer.setSize(getWidth(), getHeight());
+				document.body.appendChild(renderer.domElement);
+				scene.add(createLight());
+				scene.add(createAmbientLight());
+				scene.add(createBackground());
+				scene.add(createSphere());
+				scene.add(ppois1);
+				scene.add(ppois2);
+				renderer.render(scene, camera);
+				window.addEventListener('resize', () => {
+					renderer.setSize(getWidth(), getHeight());
+					camera.aspect = getWidth() / getHeight();
+					camera.updateProjectionMatrix();
+				});
+				animate();
+			}
+			main();
+		</script>
+	</body>
+</html>

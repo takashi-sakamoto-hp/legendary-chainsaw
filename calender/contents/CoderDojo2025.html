@@ -1,0 +1,1007 @@
+<html>
+<head>
+<style>
+	table.calendar { width: 100%; border-collapse: collapse; }
+	table.calendar caption { font-size: 2em;font-weight: bold; }
+	table.calendar th:first-child { color: #ff0000; background-color: #ffe0e0; }
+	table.calendar td:first-child { color: #ff0000; background-color: #ffe0e0; }
+	table.calendar th:last-child { color: #0000ff; background-color: #e0e0ff; }
+	table.calendar td:last-child { color: #0000ff; background-color: #e0e0ff; }
+	table.calendar td.picture { padding: 0px 0px 10px 0px; color: #000000; background-color: #f8f8f8; height: 280px}
+	table.calendar td.holiday { font-weight: bold; color: #ff0000; background-color: #ffe0e0; }
+	table.calendar td.na { color: #a0a0a0; background-color: #e0e0e0; }
+	table.calendar th { border: solid 1px gray; padding: 4px 0px 0px 0px; }
+	table.calendar td { border: solid 1px gray; padding: 4px 5px 0px 5px; vertical-align: top; text-align: right;}
+</style>
+<svg width="0" height="0">
+<defs>
+<!-- Common -->	
+	<radialGradient id="GradientAyuSpot">
+		<stop offset="0%" stop-color="yellow" stop-opacity="100%"/>
+		<stop offset="40%" stop-color="yellow" stop-opacity="80%"/>
+		<stop offset="100%" stop-color="#c3d941" stop-opacity="0%"/>
+	</radialGradient>
+	<linearGradient id="GradientAyuBody" x1="0%" x2="100%" y1="0%" y2="100%" gradientUnits="objectBoundingBox">
+		<stop offset="0%" stop-color="#C3D941"/>
+		<stop offset="50%" stop-color="#C3D941"/>
+		<stop offset="70%" stop-color="white"/>
+	</linearGradient>
+	<linearGradient id="GradientDojo" x1="0%" x2="0%" y1="0%" y2="100%" gradientUnits="userSpaceOnUse">
+		<stop offset="0%" stop-color="white"/>
+		<stop offset="100%" stop-color="#3fb197"/>
+	</linearGradient>
+	<clipPath id="clipFrame">
+		<rect x="-50" y="-100" width="660" height="660" />
+	</clipPath>
+	<symbol id="atsugi">
+		<path fill="black" d="M 87.6,232.8 C 95.4,235.4 105.8,236.7 111,236.7 C 116.2,236.7 135.7,226.3 135.7,223.7 C 135.7,221.1 131.8,214.6 130.5,212 C 134.4,214.6 151.3,222.4 151.3,228.9 C 151.3,238 120.1,247.1 111,247.1 C 103.2,247.1 91.5,236.7 87.6,232.8 Z"/>
+		<path fill="black" d="M 133.1,215.9 C 131.8,214.6 129.2,212 126.6,212 C 121.4,212 116.2,249.7 116.2,258.8 C 116.2,266.6 118.8,293.9 125.3,300.4 C 126.6,301.7 126.6,304.3 125.3,305.6 C 124,306.9 121.4,306.9 118.8,305.6 C 116.2,304.3 116.2,303 114.9,301.7 C 108.4,295.2 104.5,269.2 104.5,258.8 C 104.5,251 107.1,212 120.1,209.4 C 120.1,209.4 124,208.1 125.3,208.1 C 127.9,208.1 134.4,214.6 134.4,214.6 Z"/>
+		<path fill="black" d="M 137,249.7 C 144.8,245.8 150,251 151.3,254.9 C 156.5,270.5 135.7,291.3 125.3,297.8 C 114.9,304.3 98,310.8 91.5,310.8 C 82.4,310.8 77.2,301.7 77.2,297.8 C 77.2,295.2 82.4,292.6 82.4,295.2 C 82.4,297.8 86.3,305.6 90.2,305.6 C 94.1,305.6 117.5,292.6 121.4,288.7 C 125.3,284.8 143.5,274.4 143.5,254.9 C 143.5,251 139.6,249.7 137,249.7 Z"/>
+		<path fill="black" d="M 77.2,297.8 C 77.2,278.3 122.7,254.9 146.1,254.9 C 155.2,254.9 181.2,266.6 181.2,287.4 C 182.5,319.9 144.8,323.8 131.8,323.8 C 138.3,323.8 169.5,306.9 169.5,287.4 C 169.5,270.5 156.5,261.4 146.1,261.4 C 131.8,261.4 82.4,291.3 82.4,295.2 Z"/>
+		<path fill="black" d="M 213.7,257.5 C 216.3,257.5 221.5,258.8 224.1,258.8 C 237.1,258.8 281.3,248.4 293,248.4 C 304.7,248.4 320.3,251 328.1,261.4 C 328.1,261.4 319,265.3 319,265.3 C 316.4,261.4 309.9,256.2 300.8,256.2 C 283.9,256.2 248.8,267.9 239.7,267.9 C 226.7,267.9 215,261.4 213.7,257.5 Z"/>
+		<path fill="url(#GradientDojo)" d="M 328.1,261.4 C 335.9,270.5 334.6,273.1 334.6,275.7 C 334.6,286.1 293,296.5 281.3,297.8 C 283.9,297.8 320.3,280.9 320.3,269.2 C 320.3,267.9 320.3,267.9 319,265.3 C 319,265.3 328.1,261.4 328.1,261.4 Z"/>
+		<path fill="url(#GradientDojo)" d="M 389.2,240.6 C 402.2,240.6 411.3,234.1 419.1,234.1 C 425.6,234.1 429.5,235.4 429.5,236.7 C 429.5,239.3 420.4,244.5 417.8,245.8 C 412.6,248.4 399.6,251 389.2,240.6 Z"/>
+		<path fill="url(#GradientDojo)" d="M 387.9,264 C 387.9,265.3 390.5,266.6 391.8,266.6 C 395.7,266.6 426.9,257.5 426.9,245.8 C 428.2,245.8 434.7,251 434.7,254.9 C 434.7,257.5 429.5,262.7 426.9,264 C 421.7,266.6 397,275.7 391.8,275.7 C 387.9,275.7 385.3,271.8 385.3,270.5 C 385.3,269.2 387.9,266.6 387.9,264 Z"/>
+		<path fill="url(#GradientDojo)" d="M 407.4,215.9 C 412.6,215.9 413.9,252.3 429.5,265.3 C 438.6,273.1 445.1,284.8 445.1,290 C 445.1,293.9 434.7,295.2 432.1,295.2 C 429.5,295.2 417.8,293.9 415.2,293.9 C 416.5,293.9 430.8,290 432.1,288.7 C 433.4,287.4 434.7,286.1 434.7,284.8 C 434.7,282.2 425.6,270.5 423,267.9 C 404.8,249.7 402.2,226.3 402.2,221.1 C 402.2,215.9 402.2,215.9 407.4,215.9 Z"/>
+		<path fill="url(#GradientDojo)" d="M 376.2,305.6 C 376.2,303 378.8,301.7 378.8,300.4 C 378.8,314.7 432.1,316 432.1,325.1 C 432.1,330.3 423,330.3 420.4,330.3 C 403.5,330.3 376.2,314.7 376.2,305.6 Z"/>
+		<path fill="url(#GradientDojo)" d="M 452.9,212 C 458.1,212 471.1,214.6 471.1,218.5 C 471.1,222.4 469.8,223.7 467.2,223.7 C 462,223.7 452.9,214.6 452.9,212 Z"/>
+		<path fill="url(#GradientDojo)" d="M 441.2,222.4 C 446.4,222.4 460.7,227.6 460.7,232.8 C 460.7,235.4 459.4,236.7 456.8,236.7 C 450.3,236.7 441.2,226.3 441.2,222.4 Z"/>
+	</symbol>
+	<symbol id="ayu" stroke="black" stroke-width="0.3" fill="#C3D941">
+		<path id="dorsFin" d="M 40,12 C 37,11 35,11.5 33,11.5 C 33,12 28,19 22,24 C 22,24 34,21 34,21 Z M 38,15 L 33,14 M 37,18 L 31,17"/>
+		<path id="pelvFin" d="M 12,29 C 6,33 16,34 21,31 Z"/>
+		<path id="analFin" d="M 27,31 C 33,33 41,32 40,27 Z"/>
+		<path id="body" fill="url(#GradientAyuBody)" d="M 9,25 C 37,26 45,-4 59,1 C 58,3 57,6 57,6 C 60,5 62,4 62,4 C 67,9 43,41 8,29 L 7,27 Z">
+			<animate id="anime_body1" begin="0s;anime_body2.end" attributeName="d" dur="1s" fill="freeze"
+				to="M 9,25 C 37,26 45,-4 59,1 C 58,3 57,6 57,6 C 57,6 59,1 59,1 C 68,6 43,41 8,29 L 7,27 Z"/>
+			<animate id="anime_body2" begin="anime_body1.end"    attributeName="d" dur="1s"
+				to="M 9,25 C 37,26 45,-4 59,1 C 58,3 57,6 57,6 C 60,5 62,4 62,4 C 67,9 43,41 8,29 L 7,27 Z"/>
+		</path>
+		<ellipse stroke="none" cx="0" cy="0" rx="3" ry="6" fill="url(#GradientAyuSpot)" transform="translate(44,16) rotate(-35)"/>
+		<path id="tailFin" d="M 9.1,25 C 7,24 5,22 2,20 C 3,22 4,24 5,26 C 3,29 2,31 0,34 C 3,32 5,31 8.1,29 M 4.5,24 L 6.5,25 M 6.5,27 L 4.7,27 M 5.5,28.5 L 2.8,30"/>
+		<path id="erabuta" d="M 50,15 C 47,14 46,9 47,7 C 46,9 47,14 50,15"/>
+		<path id="pectFin" d="M 51,16 L 46,18 C 46,21 48,27 51,27 C 51,27 54,18 54,18 M 50,19 L 47,21 M 51,20 L 49,25">
+			<animate id="anime_pectFin1" begin="0s;anime_pectFin2.end" attributeName="d" dur="0.2s" fill="freeze"
+				to="M 51,16 L 49,19 C 49,21 51,28 54,26 C 55,24 55,20 54,18 M 51,18 L 50,21 M 52,20 L 52,24"/>
+			<animate id="anime_pectFin2" begin="anime_pectFin1.end"    attributeName="d" dur="0.3s"
+				to="M 51,16 L 46,18 C 46,21 48,27 51,27 C 51,27 54,18 54,18 M 50,19 L 47,21 M 51,20 L 49,25"/>
+		</path>
+		<path id="eye" fill= "black" d="M 50,8 C 50,6.7 52,6.7 52,8 C 52,9.3 50,9.3 50,8 Z"/>
+	</symbol>
+	<symbol id="zero">
+		<path	stroke="black" stroke-width="0" fill="black"
+				d="M 258,98 L 306,98 C 314,98 322,106 322,114 L 322,194 C 322,202 314,210 306,210 L 258,210 C 250,210 242,202 242,194 L 242,114 C 242,106 250,98 258,98 L 258,114 L 258,194 L 306,194 L 306,114 L 258,114 Z"/>
+	</symbol>
+	<symbol id="one">
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)"
+				d="M 264,346 C 280,346 280,346 280,362 L 280,442 L 296,442 L 296,410 C 296,402 312,402 312,410 L 312,442 C 312,458 312,458 296,458 L 240,458 C 232,458 232,442 240,442 L 264,442 L 264,362 L 240,362 C 232,362 232,346 240,346 Z"/>
+	</symbol>
+	<symbol id="circleText1_4">
+		<path id="textPath1_4" stroke-width="0" fill="none" d="M 274,34 A 240,240 0 0 1 514,274"/>
+		<text font-size="22" stroke-width="0.2" textLength="360">
+			<textPath href="#textPath1_4">CoderDojo ATSUGI SINCE 2018</textPath>
+		</text>
+	</symbol>
+	<symbol id="circleText">
+		<g stroke="white" fill="white">
+		<use href="#circleText1_4"/>
+		<use href="#circleText1_4" transform="rotate( 90 274,274)"/>
+		<use href="#circleText1_4" transform="rotate(180 274,274)"/>
+		<use href="#circleText1_4" transform="rotate(270 274,274)"/>
+			<animateTransform attributeName="transform" type="rotate" from="0 274,274" to="-360 274,274" dur="60s" repeatCount="indefinite"/>
+		</g>
+	</symbol>
+	<symbol id="circleTextBlack">
+		<g stroke="black" fill="black">
+		<use href="#circleText1_4"/>
+		<use href="#circleText1_4" transform="rotate( 90 274,274)"/>
+		<use href="#circleText1_4" transform="rotate(180 274,274)"/>
+		<use href="#circleText1_4" transform="rotate(270 274,274)"/>
+			<animateTransform attributeName="transform" type="rotate" from="0 274,274" to="-360 274,274" dur="60s" repeatCount="indefinite"/>
+		</g>
+	</symbol>
+<!-- Normal -->
+	<symbol id="CoderDojoAtsugi">
+		<path	stroke="black" stroke-width="0" fill="black"			  d="M 274,34 A 240,240 0 1,1 274,514 Z"/>
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)" d="M 274,34 A 240,240 0 1,0 274,514 Z"/>
+		<circle	stroke="black" stroke-width="0" fill="url(#GradientDojo)" cx="274" cy="154" r="120"/>
+		<use href="#zero"/>
+		<circle	stroke="black" stroke-width="0" fill="black" cx="274" cy="394" r="120"/>
+		<use href="#one"/>
+		<circle	stroke="black" stroke-width="30" fill="none"  cx="274" cy="274" r="248"/>
+		<use href="#circleText"/>
+	</symbol>
+<!-- January -->
+	<symbol id="fuji">
+		<path stroke="black" stroke-width="1" fill="#0000ff" d="M 0,68 C 7,61 13,52 19,40 C 32,25 32,25 45,21 C 60,25 60,25 73,40 C 78,51 88,65 95,71"/>
+		<path stroke="black" stroke-width="1" fill="white" d="M 19,40 C 25,29 29,19 31,13 C 34,13 58,13 62,13 C 64,20 69,34 73,40 C 68,40 65,34 62,34 C 60,34 62,46 59,46 C 54,46 51,34 46,34 C 43,34 41,45 34,45 C 31,45 34,32 31,32 C 27,32 24,40 19,40 Z"/>
+	</symbol>
+	<symbol id="CoderDojoAtsugi-01">
+		<path	stroke="black" stroke-width="0" fill="red"			  d="M 274,34 A 240,240 0 1,1 274,514 Z"/>
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)" d="M 274,34 A 240,240 0 1,0 274,514 Z"/>
+		<circle	stroke="black" stroke-width="0" fill="url(#GradientDojo)" cx="274" cy="154" r="120"/>
+		<use href="#zero"/>
+		<circle	stroke="black" stroke-width="0" fill="red" cx="274" cy="394" r="120"/>
+		<use href="#one"/>
+		<circle	stroke="red" stroke-width="30" fill="none"  cx="274" cy="274" r="248"/>
+		<use href="#circleText"/>
+	</symbol>
+<!-- February -->
+	<symbol id="ribbon">
+		<g stroke="black" stroke-width="1" fill="pink" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 5,42 C 9,23 35,18 58,24 C 85,17 107,27 111,41 C 107,41 98,43 97,43 C 96,44 92,53 91,58 C 87,51 70,34 58,27 C 45,34 29,53 25,59 C 23.33,53.67 21.67,48.33 20,43 C 15,42.67 10,42.33 5,42 Z"/>
+			<path d="M 58,16 C 37,2 18,0 16,9 C 15.5,10.5 17,13 18,15 C 18,17 15,25 20,28 C 22,29 58,29 58,29 C 63,29 93,31 96,28 C 99,25 99.75,19.75 97,16 C 100,13 101,9 99,7 C 93,1 81,2 58,16 Z"/>
+			<path d="M 58,13 C 66,13 67,13 67,21 C 67,30 66,30 58,30 C 50,30 49,30 49,21 C 49,13 50,13 58,13 Z"/>
+		</g>
+	</symbol>
+	<symbol id="CoderDojoAtsugi-02">
+		<path	stroke="black" stroke-width="0" fill="red"			      d="M 274,480 C 414,480 514,320 514,260 C 514,120 474,40 374,40 C 334,40 274,60 274,90 Z"/>
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)" d="M 274,90 C 274,60 214,40 174,40 C 74,40 34,120 34,240 C 34,320 134,480 274,480 Z"/>
+		<circle	stroke="black" stroke-width="0" fill="url(#GradientDojo)" cx="274" cy="154" r="120"/>
+		<use href="#zero"/>
+		<circle	stroke="black" stroke-width="0" fill="red" cx="274" cy="394" r="120"/>
+		<use href="#one"/>
+		<path stroke="red" stroke-width="30"  stroke-linejoin="bevel" fill="none"
+			d="M 274,90 C 274,60 214,40 174,40 C 74,40 34,120 34,240 C 34,320 134,480 274,480 C 414,480 514,320 514,260 C 514,120 474,40 374,40 C 334,40 274,60 274,90 Z"/>
+		<path id="febTextPath" stroke-width="0" fill="none"
+			d="M 281,75 C 281,60 334,40 374,40 C 474,40 514,120 514,260 C 514,320 414,480 274,480 C 134,480 34,320 34,240 C 34,120 74,40 174,40 C 214,40 267,60 267,75"/>
+		<g>
+			<text font-size="21" stroke="white" fill="white" stroke-width="0.2" textLength="360" dx="0" dy="7">
+				<textPath href="#febTextPath">CoderDojo ATSUGI SINCE 2018</textPath>
+				<animate attributeName="dx" from="1500" to="1125" dur="15s" repeatCount="indefinite"/>
+			</text>
+			<text font-size="21" stroke="white" fill="white" stroke-width="0.2" textLength="360" dx="0" dy="7">
+				<textPath href="#febTextPath">CoderDojo ATSUGI SINCE 2018</textPath>
+				<animate attributeName="dx" from="1125" to="750" dur="15s" repeatCount="indefinite"/>
+			</text>
+			<text font-size="21" stroke="white" fill="white" stroke-width="0.2" textLength="360" dx="0" dy="7">
+				<textPath href="#febTextPath">CoderDojo ATSUGI SINCE 2018</textPath>
+				<animate attributeName="dx" from= "750" to="375" dur="15s" repeatCount="indefinite"/>
+			</text>
+			<text font-size="21" stroke="white" fill="white" stroke-width="0.2" textLength="360" dx="0" dy="7">
+				<textPath href="#febTextPath">CoderDojo ATSUGI SINCE 2018</textPath>
+				<animate attributeName="dx" from= "375" to="0" dur="15s" repeatCount="indefinite"/>
+			</text>
+			<text font-size="21" stroke="white" fill="white" stroke-width="0.2" textLength="360" dx="0" dy="7">
+				<textPath href="#febTextPath">CoderDojo ATSUGI SINCE 2018</textPath>
+				<animate attributeName="dx" from= "-0" to="-375" dur="15s" repeatCount="indefinite"/>
+			</text>
+		</g>
+	</symbol>
+<!-- March -->
+	<symbol id="ume">
+		<radialGradient id="GradientUme">
+			<stop offset="0%" stop-color="white" stop-opacity="80%"/>
+			<stop offset="70%" stop-color="red" stop-opacity="80%"/>
+			<stop offset="100%" stop-color="red" stop-opacity="100%"/>
+		</radialGradient>
+		<path fill="url(#GradientUme)" stroke-width="0" d="M 17,32 C 12,28 5,33 8,39 C 3,42 6,50 12,49 C 13,55 22,55 23,49 C 30,49 31,40 25,38 C 28,32 22,28 17,32 Z"/>
+		<g stroke="white" stroke-width="0" fill="white">
+			<path stroke-width="0.6" d="M 15,37 L 19,46 M 15,46 L 19,37 M 12,43 L 22,40 M 12,39 L 22,44"/>
+			<circle cx="15" cy="37" r="0.8"/>
+			<circle cx="19" cy="46" r="0.8"/>
+			<circle cx="15" cy="46" r="0.8"/>
+			<circle cx="19" cy="37" r="0.8"/>
+			<circle cx="12" cy="43" r="0.8"/>
+			<circle cx="22" cy="40" r="0.8"/>
+			<circle cx="12" cy="39" r="0.8"/>
+			<circle cx="22" cy="44" r="0.8"/>
+		</g>
+	</symbol>
+	<symbol id="uguisu">
+		<path stroke-width="0" fill="#cd853f" d="M 31,58 C 31,58 31,61 31,61 C 28,61 23,61 22,62 C 23,63 25,62 26,62 C 26,63 23,63 23,64 C 24,65 26,64 27,64 C 27,65 26,65 26,66 C 27,66 32,63 32,62 C 32,62 32,58 32,58 Z"/>
+		<path stroke-width="0" fill="#cd853f" d="M 41,58 C 41,58 41,65 41,65 C 39,65 34,65 33,66 C 34,67 35,66 37,66 C 37,67 35,68 35,69 C 36,69 38,67 39,67 C 39,68 38,69 38,70 C 39,70 42,67 42,66 C 42,65 43,61 43,58 Z"/>
+		<path stroke-width="0" fill="#98fb98" d="M 11,22 C 21,17 30,17 39,32 C 39,32 71,52 71,52 C 59,54 42,67 24,56 C 7,46 21,31 11,22 Z"/>
+		<path stroke-width="0" fill="#68e800" d="M 11,22 C 8,10 20,4 25,4 C 39,4 42,11 47,21 C 61,41 72,45 88,47 C 87,50 87,54 87,57 C 81,57 74,55 71,52 C 65,54 54,51 50,49 C 48,48 42,48 37,44 C 28,36 27,21 11,22 Z"/>
+		<path stroke-width="0" fill="#58d800" d="M 38,26 C 49,12 66,36 77,43 C 52,55 31,36 38,26 Z"/>
+		<path stroke-width="0" fill="#f0e68c" d="M 4,19 C 7,14 16,14 17,19 C 13,21 6,21 4,19 Z"/>
+		<path stroke-width="0" fill="black"   d="M 23,14 C 23,9 28,10 28,14 C 28,18 23,17 23,14"/>	</symbol>
+	<symbol id="CoderDojoAtsugi-03">
+		<path	stroke="black" stroke-width="0" fill="black"			  d="M 274,34 A 240,240 0 1,1 274,514 Z"/>
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)" d="M 274,34 A 240,240 0 1,0 274,514 Z"/>
+		<circle	stroke="black" stroke-width="0" fill="url(#GradientDojo)" cx="274" cy="154" r="120"/>
+		<use href="#zero"/>
+		<circle	stroke="black" stroke-width="0" fill="black" cx="274" cy="394" r="120"/>
+		<use href="#one"/>
+		<circle	stroke="#c55a0a" stroke-width="30" fill="none"  cx="274" cy="274" r="248"/>
+		<use href="#circleText"/>
+	</symbol>
+<!-- April -->
+	<symbol id="peachFlower1">
+		<radialGradient id="GradientPeachFlower">
+			<stop offset="0%" stop-color="#ffe8e8" stop-opacity="100%"/>
+			<stop offset="80%" stop-color="#ffc0cb" stop-opacity="100%"/>
+			<stop offset="100%" stop-color="#ffffff" stop-opacity="100%"/>
+		</radialGradient>
+		<g stroke="none" stroke-width="0" fill="url(#GradientPeachFlower)" stroke-linejoin="round" stroke-linecap="round">
+		<path d="M 32,32 C 40,16 47,8 60,21 C 61,38 54,43 32,32 Z"/>
+		<path d="M 32,32 C 57,37 59,39 53,56 C 37,59 32,54 32,32 Z"/>
+		<path d="M 32,32 C 38,54 33,62 17,58 C 6,45 8,37 32,32 Z"/>
+		<path d="M 32,32 C 14,42 3,42 3,24 C 15,12 17,11 32,32 Z"/>
+		<path d="M 32,32 C 44,19 54,10 32,1 C 16,10 15,18 32,32 Z"/>
+		</g>
+	</symbol>
+	<symbol stroke="white" stroke-width="1" fill="none" id="peachFlower2">
+		<path stroke-width="0" fill="yellow" d="M 27,32 C 27,25 37,25 37,32 C 37,39 27,39 27,32 Z"/>
+		<path d="M 32,30 C 32,27 37,19 35,12"/>
+		<circle stroke-width="0" fill="yellow" cx="35" cy="12" r="1"/>
+		<path d="M 33,30 C 33,28 37,20 39,17"/>
+		<circle stroke-width="0" fill="yellow" cx="39" cy="17" r="1"/>
+		<path d="M 33,31 C 37,29 43,26 46,23"/>
+		<circle stroke-width="0" fill="yellow" cx="46" cy="23" r="1"/>
+		<path d="M 33,32 C 41,29 45,29 48,30"/>
+		<circle stroke-width="0" fill="yellow" cx="48" cy="30" r="1"/>
+		<path d="M 33,32 C 38,34 38,34 45,35"/>
+		<circle stroke-width="0" fill="yellow" cx="45" cy="35" r="1"/>
+		<path d="M 33,31 C 36,28 38,25 41,23"/>
+		<circle stroke-width="0" fill="yellow" cx="41" cy="23" r="1"/>
+		<path d="M 32,30 C 36,27 39,23 42,19"/>
+		<circle stroke-width="0" fill="yellow" cx="42" cy="19" r="1"/>
+		<path d="M 33,32 C 37,36 43,37 45,41"/>
+		<circle stroke-width="0" fill="yellow" cx="45" cy="41" r="1"/>
+		<path d="M 33,33 C 36,36 37,40 39,42"/>
+		<circle stroke-width="0" fill="yellow" cx="39" cy="42" r="1"/>
+		<path d="M 33,33 C 34,39 36,43 37,47"/>
+		<circle stroke-width="0" fill="yellow" cx="37" cy="47" r="1"/>
+		<path d="M 32,33 C 32,37 32,41 31,45"/>
+		<circle stroke-width="0" fill="yellow" cx="31" cy="45" r="1"/>
+		<path d="M 32,33 C 28,39 28,42 25,47"/>
+		<circle stroke-width="0" fill="yellow" cx="25" cy="47" r="1"/>
+		<path d="M 32,33 C 28,38 26,40 21,44"/>
+		<circle stroke-width="0" fill="yellow" cx="21" cy="44" r="1"/>
+		<path d="M 32,33 C 29,36 27,37 24,38"/>
+		<circle stroke-width="0" fill="yellow" cx="24" cy="38" r="1"/>
+		<path d="M 32,33 C 26,33 22,36 17,38"/>
+		<circle stroke-width="0" fill="yellow" cx="17" cy="38" r="1"/>
+		<path d="M 31,32 C 26,30 19,31 15,32"/>
+		<circle stroke-width="0" fill="yellow" cx="15" cy="32" r="1"/>
+		<path d="M 30,31 C 26,30 22,28 21,27"/>
+		<circle stroke-width="0" fill="yellow" cx="21" cy="27" r="1"/>
+		<path d="M 31,30 C 25,26 24,25 22,22"/>
+		<circle stroke-width="0" fill="yellow" cx="22" cy="22" r="1"/>
+		<path d="M 31,30 C 27,25 26,21 24,18"/>
+		<circle stroke-width="0" fill="yellow" cx="24" cy="18" r="1"/>
+		<path d="M 31,30 C 32,23 32,20 31,16"/>
+		<circle stroke-width="0" fill="yellow" cx="31" cy="16" r="1"/>
+		<path d="M 31,30 C 31,25 30,23 29,21"/>
+		<circle stroke-width="0" fill="yellow" cx="29" cy="21" r="1"/>
+	</symbol>
+	<symbol id="peachFlower">
+		<use href="#peachFlower1" transform="rotate(36 32,32)"/>
+		<use href="#peachFlower1"/>
+		<use href="#peachFlower2"/>
+	</symbol>
+	<symbol id="tsutsujiFlower1">
+		<radialGradient id="GradientTsutsujiFlower" fx="0.5" fy="0.9" cx="0.5" cy="0.5">
+			<stop offset="0%" stop-color="#ff0000" stop-opacity="100%"/>
+			<stop offset="80%" stop-color="#ffc0cb" stop-opacity="90%"/>
+			<stop offset="100%" stop-color="#ffd0db" stop-opacity="80%"/>
+		</radialGradient>
+		<path stroke-width="0" fill="url(#GradientTsutsujiFlower)" d="M 36,34 C 16,31 19,1 32,1 C 43,1 54,26 36,34 Z"/>
+		<g stroke-width="0" fill="#D08080" opacity="90%">
+			<circle cx="36" cy="20" r="1"/>
+			<circle cx="32" cy="24" r="1"/>
+			<circle cx="38" cy="28" r="1"/>
+			<circle cx="33" cy="23" r="1"/>
+			<circle cx="37" cy="22" r="1"/>
+			<circle cx="36" cy="26" r="1"/>
+		</g>
+	</symbol>
+	<symbol id="tsutsujiFlower2">
+		<g stroke="#ffc0d0" stroke-width="1" fill="none">
+			<path d="M 32,30 C 40,27 44,23 42,22"/>
+			<path d="M 32,31 C 36,30 42,36 42,32"/>
+			<path d="M 32,31 C 35,35 40,38 42,37"/>
+			<path d="M 32,31 C 33,39 33,43 31,41"/>
+			<path d="M 32,30 C 29,35 26,39 24,38"/>
+			<path d="M 32,30 C 28,32 24,34 22,31"/>
+			<path d="M 32,30 C 25,26 26,24 27,22"/>
+		</g>
+		<g stroke="brown" stroke-width="1" fill="brown">
+			<path d="M 28,19 C 29,20 28,23 27,22 C 26,21 27,18 28,19 Z"/>
+			<path d="M 42,22 C 42,20 40,21 40,23 C 40,24 42,24 42,22 Z"/>
+			<path d="M 42,32 C 43,33 45,30 43,30 C 42,30 41,31 42,32 Z"/>
+			<path d="M 42,37 C 43,36 45,37 44,38 C 42,40 41,38 42,37 Z"/>
+			<path d="M 31,41 C 32,41 31,37 30,38 C 29,39 30,41 31,41 Z"/>
+			<path d="M 24,38 C 24,37 23,35 22,36 C 21,38 24,40 24,38 Z"/>
+			<path d="M 22,31 C 21,32 20,30 21,29 C 22,28 23,30 22,31 Z"/>
+		</g>
+	</symbol>
+	<symbol id="tsutsujiFlower">
+		<use href="#tsutsujiFlower1" transform="rotate(70 36,34)"/>
+		<use href="#tsutsujiFlower1" transform="rotate(130 36,34) "/>
+		<use href="#tsutsujiFlower1" transform="rotate(300 36,34)"/>
+		<use href="#tsutsujiFlower1" transform="rotate(230 36,34)"/>
+		<use href="#tsutsujiFlower1"/>
+		<use href="#tsutsujiFlower2"/>
+	</symbol>
+	<symbol id="CoderDojoAtsugi-04">
+		<path	stroke="black" stroke-width="0" fill="black"			  d="M 274,34 A 240,240 0 1,1 274,514 Z"/>
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)" d="M 274,34 A 240,240 0 1,0 274,514 Z"/>
+		<circle	stroke="black" stroke-width="0" fill="url(#GradientDojo)" cx="274" cy="154" r="120"/>
+		<use href="#zero"/>
+		<circle	stroke="black" stroke-width="0" fill="black" cx="274" cy="394" r="120"/>
+		<use href="#one"/>
+		<circle	stroke="#c55a0a" stroke-width="30" fill="none"  cx="274" cy="274" r="248"/>
+		<use href="#circleText"/>
+	</symbol>
+<!-- May -->
+	<symbol id="kabuto">
+		<g stroke="black" stroke-width="1" fill="blue" stroke-linejoin="round" stroke-linecap="round">
+		<path d="M 7,47 L 49,0 L 91,47 L 70,47 L 62,39 L 55,32 L 49,26 L 42,32 L 35,39 L 28,47 Z"/>
+		<path d="M 35,39 L 12,17 L 31,17 L 42,32 Z"/>
+		<path d="M 55,32 L 67,17 L 86,17 L 62,39 Z"/>
+		<path d="M 49,0 L 49,26"/>
+		<path fill="white" d="M 28,47 L 35,39 L 42,32 L 49,26 L 70,47 Z"/>
+		<path fill="white" d="M 1,54 L 6,46 L 92,46 L 97,54 Z"/>
+		</g>
+	</symbol>
+	<symbol id="CoderDojoAtsugi-05">
+		<path	stroke="black" stroke-width="0" fill="black"			  d="M 274,34 A 240,240 0 1,1 274,514 Z"/>
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)" d="M 274,34 A 240,240 0 1,0 274,514 Z"/>
+		<circle	stroke="black" stroke-width="0" fill="url(#GradientDojo)" cx="274" cy="154" r="120"/>
+		<use href="#zero"/>
+		<circle	stroke="black" stroke-width="0" fill="black" cx="274" cy="394" r="120"/>
+		<use href="#one"/>
+		<circle	stroke="black" stroke-width="30" fill="none"  cx="274" cy="274" r="248"/>
+		<use href="#circleText"/>
+	</symbol>
+<!-- June -->
+	<symbol id="CoderDojoAtsugi-06">
+		<path	stroke="black" stroke-width="0" fill="black"			  d="M 274,34 A 240,240 0 1,1 274,514 Z"/>
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)" d="M 274,34 A 240,240 0 1,0 274,514 Z"/>
+		<circle	stroke="black" stroke-width="0" fill="url(#GradientDojo)" cx="274" cy="154" r="120"/>
+		<use href="#zero"/>
+		<circle	stroke="black" stroke-width="0" fill="black" cx="274" cy="394" r="120"/>
+		<use href="#one"/>
+		<circle	stroke="black" stroke-width="30" fill="none"  cx="274" cy="274" r="248"/>
+		<use href="#circleText"/>
+	</symbol>
+<!-- July -->
+	<symbol id="tanabata">
+		<g stroke="black" stroke-width="0" fill="#80d080" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 48,27 C 48,25 48,22 47,17 C 49,21 50,25 50,28 Z"/>
+			<path d="M 41,25 C 36,25 27,28 24,32 C 29,28 38,26 43,26 Z"/>
+			<path d="M 67,40 C 59,39 47,38 40,40 C 46,40 56,40 67,41 Z"/>
+			<path d="M 73,43 C 72,37 70,25 73,15 C 71,25 73,38 74,44 Z"/>
+			<path d="M 90,71 C 81,65 51,65 40,69 C 50,67 79,66 91,73 Z"/>
+			<path d="M 94,74 C 97,65 103,47 111,37 C 104,49 98,67 95,76 Z"/>
+			<path d="M 97,101 C 89,95 70,91 62,91 C 73,92 88,97 97,102 Z"/>
+			<path d="M 100,95 C 103,89 110,76 117,69 C 110,79 105,88 100,98 Z"/>
+			<path d="M 98,140 C 116,78 75,27 30,22 C 75,33 110,80 91,140 C 91,142 98,142 98,140 Z"/>
+		</g>
+		<g stroke="#f0fff0" stroke-width="1" fill="none" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 96,116 C 98,117 100,117 102,116"/>
+			<path d="M 94,86 C 96,87 98,86 99,85"/>
+			<path d="M 81,57 C 82,58 85,57 85,56"/>
+			<path d="M 65,39 C 66,39 67,38 67,37"/>
+		</g>
+		<g stroke="black" stroke-width="0" fill="#80d080" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 30,22 C 28,18 19,17 12,18 C 15,22 26,23 30,22 Z"/>
+			<path d="M 47,17 C 47,12 37,7 33,9 C 36,13 44,17 47,17 Z"/>
+			<path d="M 47,17 C 46,13 48,2 54,1 C 52,3 53,13 47,17"/>
+			<path d="M 73,15 C 70,11 71,4 75,0 C 74,2 79,10 73,15 Z"/>
+			<path d="M 72,21 C 68,21 61,16 61,11 C 63,14 71,14 72,21 Z"/>
+			<path d="M 72,22 C 75,17 80,12 86,12 C 84,14 80,23 72,22"/>
+			<path d="M 24,32 C 19,39 10,38 8,39 C 12,33 20,31 24,32 Z"/>
+			<path d="M 33,27 C 33,32 30,36 25,39 C 25,34 29,28 33,27 Z"/>
+			<path d="M 40,40 C 40,43 35,47 28,48 C 29,44 36,39 40,40 Z"/>
+			<path d="M 51,39 C 51,35 47,31 43,30 C 43,34 46,38 51,39 Z"/>
+			<path d="M 51,40 C 51,44 46,48 41,50 C 42,46 46,40 51,40 Z"/>
+			<path d="M 72,35 C 68,34 61,30 58,26 C 65,25 70,29 72,35 Z"/>
+			<path d="M 73,37 C 78,39 86,30 88,27 C 81,27 76,32 73,37 Z"/>
+			<path d="M 108,41 C 103,37 101,31 102,25 C 107,29 109,36 108,41 Z"/>
+			<path d="M 111,37 C 116,38 122,33 126,29 C 120,29 113,32 111,37 Z"/>
+			<path d="M 103,52 C 100,50 97,44 96,38 C 102,41 104,47 103,52 Z"/>
+			<path d="M 105,48 C 115,48 121,44 126,43 C 120,40 112,42 105,48 Z"/>
+			<path d="M 97,65 C 93,62 91,58 91,51 C 96,55 98,60 97,65 Z"/>
+			<path d="M 100,61 C 104,62 113,59 115,58 C 111,55 103,57 100,61 Z"/>
+			<path d="M 117,69 C 124,69 127,67 129,64 C 124,63 118,65 117,69 Z"/>
+			<path d="M 111,77 C 108,76 106,71 106,66 C 112,69 112,73 111,77 Z"/>
+			<path d="M 111,78 C 116,80 120,78 124,76 C 119,73 115,74 111,78 Z"/>
+			<path d="M 104,90 C 108,92 115,90 118,88 C 114,86 108,86 104,90 Z"/>
+			<path d="M 43,68 C 40,67 31,61 29,57 C 37,58 43,63 43,68 Z"/>
+			<path d="M 54,67 C 50,63 45,57 44,54 C 52,55 55,62 54,67 Z"/>
+			<path d="M 72,67 C 64,63 60,57 62,51 C 66,55 69,60 72,67 Z"/>
+			<path d="M 84,69 C 80,68 77,65 76,60 C 81,61 84,66 84,69 Z"/>
+			<path d="M 73,68 C 73,72 69,77 63,81 C 64,75 69,68 73,68 Z"/>
+			<path d="M 55,67 C 55,72 52,80 49,84 C 47,77 50,71 55,67 Z"/>
+			<path d="M 41,69 C 40,74 33,78 28,80 C 30,73 37,69 41,69 Z"/>
+			<path d="M 91,98 C 86,94 85,92 86,87 C 90,90 93,94 91,98 Z"/>
+			<path d="M 85,96 C 83,101 78,103 72,104 C 75,98 79,97 85,96 Z"/>
+			<path d="M 75,93 C 77,89 75,85 70,81 C 69,88 72,90 75,93 Z"/>
+			<path d="M 63,91 C 59,93 54,93 48,92 C 53,87 60,88 63,91 Z"/>
+			<path d="M 71,93 C 70,99 65,100 60,101 C 63,95 66,94 71,93 Z"/>
+		</g>
+		<g stroke="#f0fff0" stroke-width="1" fill="none" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 30,22 C 26,20 19,19 15,19"/>
+			<path d="M 47,17 C 44,14 41,12 37,10"/>
+			<path d="M 47,17 C 49,13 50,8 51,5"/>
+			<path d="M 73,15 C 74,12 73,8 74,4"/>
+			<path d="M 72,21 C 69,19 65,15 63,14"/>
+			<path d="M 72,22 C 78,19 80,16 83,14"/>
+			<path d="M 24,32 C 20,33 15,35 12,37"/>
+			<path d="M 33,27 C 32,29 28,34 26,36"/>
+			<path d="M 40,40 C 38,41 33,45 31,46"/>
+			<path d="M 51,39 C 49,37 47,34 45,32"/>
+			<path d="M 51,40 C 48,42 45,45 43,48"/>
+			<path d="M 72,35 C 69,32 64,28 61,27"/>
+			<path d="M 73,37 C 76,36 81,31 84,30"/>
+			<path d="M 108,41 C 107,37 105,31 104,29"/>
+			<path d="M 111,37 C 114,35 119,33 122,31"/>
+			<path d="M 103,52 C 102,48 100,43 98,41"/>
+			<path d="M 105,48 C 111,45 117,45 121,43"/>
+			<path d="M 97,65 C 96,60 94,56 92,54"/>
+			<path d="M 100,61 C 104,59 110,58 112,58"/>
+			<path d="M 117,69 C 120,67 123,66 126,65"/>
+			<path d="M 111,77 C 110,74 109,71 108,69"/>
+			<path d="M 111,78 C 114,77 118,76 121,76"/>
+			<path d="M 104,90 C 108,90 112,88 115,88"/>
+			<path d="M 43,68 C 41,64 37,61 33,59"/>
+			<path d="M 54,67 C 53,62 50,58 47,56"/>
+			<path d="M 72,67 C 67,62 65,57 63,55"/>
+			<path d="M 84,69 C 82,66 79,64 78,62"/>
+			<path d="M 73,68 C 71,71 66,76 65,78"/>
+			<path d="M 55,67 C 52,71 51,76 49,80"/>
+			<path d="M 41,69 C 36,72 33,75 31,77"/>
+			<path d="M 91,98 C 90,94 89,92 87,89"/>
+			<path d="M 85,96 C 79,99 76,101 74,103"/>
+			<path d="M 75,93 C 74,89 73,86 71,83"/>
+			<path d="M 63,91 C 59,90 54,90 50,91"/>
+			<path d="M 71,93 C 68,96 64,98 62,99"/>
+		</g>
+		<g>
+			<path stroke-width="none" fill="pink" d="M 53,14 C 55,13 58,14 60,15 C 59,21 60,32 60,37 C 57,35 54,35 52,35 C 53,29 54,21 53,14 Z"/>
+			<path stroke-width="none" fill="yellow" d="M 34,25 C 36,26 38,26 40,27 C 39,32 37,41 35,45 C 33,45 30,45 28,44 C 30,39 33,31 34,25 Z"/>
+			<path stroke-width="none" fill="lightblue" d="M 90,25 C 91,26 96,24 97,25 C 96,29 96,42 95,45 C 94,44 89,46 88,45 C 89,40 90,29 90,25 Z"/>
+			<path stroke-width="none" fill="pink" d="M 61,38 C 62,40 65,41 66,42 C 64,45 56,57 55,61 C 51,59 50,58 48,57 C 52,52 57,45 61,38 Z"/>
+			<path stroke-width="none" fill="yellow" d="M 117,50 C 118,50 121,48 123,47 C 125,54 129,60 130,65 C 129,66 126,67 124,68 C 123,63 119,54 117,50 Z"/>
+			<path stroke-width="none" fill="lightblue" d="M 106,58 C 108,58 111,60 112,60 C 112,66 108,78 108,81 C 107,80 102,79 101,78 C 103,72 106,64 106,58 Z"/>
+			<path stroke-width="none" fill="pink" d="M 77,63 C 79,63 82,62 84,62 C 84,66 82,78 82,81 C 80,81 76,82 75,82 C 76,77 77,68 77,63 Z"/>
+			<path stroke-width="none" fill="yellow" d="M 70,59 C 72,60 72,62 74,63 C 72,67 67,75 63,81 C 61,80 60,78 58,76 C 63,71 67,63 70,59 Z"/>
+			<path stroke-width="none" fill="lightblue" d="M 65,90 C 67,90 70,89 72,89 C 71,94 70,104 70,109 C 69,110 64,108 62,109 C 64,103 65,94 65,90 Z"/>
+		</g>
+	</symbol>
+	<symbol id="CoderDojoAtsugi-07">
+		<path	stroke="black" stroke-width="0" fill="black"			  d="M 274,34 A 240,240 0 1,1 274,514 Z"/>
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)" d="M 274,34 A 240,240 0 1,0 274,514 Z"/>
+		<circle	stroke="black" stroke-width="0" fill="url(#GradientDojo)" cx="274" cy="154" r="120"/>
+		<use href="#zero"/>
+		<circle	stroke="black" stroke-width="0" fill="black" cx="274" cy="394" r="120"/>
+		<use href="#one"/>
+		<circle	stroke="black" stroke-width="30" fill="none"  cx="274" cy="274" r="248"/>
+		<use href="#circleText"/>
+	</symbol>
+<!-- August -->
+	<symbol id="nasu">
+		<g stroke-width="0" fill="#ffd080">
+			<path d="M 17,42 L 20,43 L 24,30 L 22,29 Z"/>
+			<path d="M 27,40 L 29,40 L 30,32 L 28,32 Z"/>
+			<path d="M 48,46 L 47,36 L 49,33 L 50,46 Z"/>
+			<path d="M 58,40 L 55,31 L 57,30 L 60,40 Z"/>
+		</g>
+		<g stroke-width="0" fill="#f8c070">
+			<path d="M 20,43 L 21,42 L 25,29 L 24,30 Z"/>
+			<path d="M 29,40 L 30,39 L 31,31 L 30,32 Z"/>
+			<path d="M 50,46 L 51,45 L 50,32 L 49,33 Z"/>
+			<path d="M 60,40 L 61,39 L 58,29 L 57,30 Z"/>
+		</g>
+		<radialGradient id="GradientNasu" fx="0.75" fy="0.45" cx="0.7" cy="0.4">
+			<stop offset="0%" stop-color="#ffffff"/>
+			<stop offset="60%" stop-color="#606090"/>
+			<stop offset="100%" stop-color="#606090"/>
+		</radialGradient>
+		<g stroke-width="0" fill="url(#GradientNasu)">
+			<path d="M 10,10 C 19,43 54,43 59,29 C 64,17 53,13 42,13 C 32,13 20,9 15,5 Z"/>
+		</g>
+		<g stroke-width="0" fill="#404060">
+			<path d="M 4,1 C 4,4 10,6 8,11 C 9.25,11.25 10,9 12,10 C 12,8 14,6 15,7 C 15,6 15,4 16,3 C 12,5 9,1 4,1 Z"/>
+		</g>
+	</symbol>
+	<symbol id="kyuri">
+		<g stroke-width="0" fill="#ffd080">
+			<path d="M 20,67 L 22,68 L 26,59 L 24,58 Z"/>
+			<path d="M 29,70 L 31,71 L 33,58 L 31,58 Z"/>
+			<path d="M 56,58 L 58,58 L 59,46 L 57,46 Z"/>
+			<path d="M 68,56 L 70,56 L 64,43 L 62,43 Z"/>
+		</g>
+		<g stroke-width="0" fill="#f8c070">
+			<path d="M 22,68 L 23,68 L 27,59 L 26,59 Z"/>
+			<path d="M 31,71 L 32,70 L 34,58 L 33,58 Z"/>
+			<path d="M 58,58 L 59,57 L 60,45 L 59,46 Z"/>
+			<path d="M 70,56 L 71,55 L 65,42 L 64,43 Z"/>
+		</g>
+		<radialGradient id="GradientKyuri" fx="0.4" fy="0.8" cx="0.3" cy="0.85">
+			<stop offset="0%" stop-color="#50a57e"/>
+			<stop offset="70%" stop-color="#00552e"/>
+			<stop offset="100%" stop-color="#00552e"/>
+		</radialGradient>
+		<g stroke-width="0" fill="url(#GradientKyuri)">
+			<path d="M 13,54 C 13,50 23,52 32,49 C 35,48 47,49 55,40 C 60,34 68,27 70,28 C 77,32 60,51 50,55 C 44,58 13,65 13,54"/>
+		</g>
+	</symbol>
+	<symbol id="CoderDojoAtsugi-08">
+		<path	stroke="black" stroke-width="0" fill="black"			  d="M 274,34 A 240,240 0 1,1 274,514 Z"/>
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)" d="M 274,34 A 240,240 0 1,0 274,514 Z"/>
+		<circle	stroke="black" stroke-width="0" fill="url(#GradientDojo)" cx="274" cy="154" r="120"/>
+		<use href="#zero"/>
+		<circle	stroke="black" stroke-width="0" fill="black" cx="274" cy="394" r="120"/>
+		<use href="#one"/>
+		<circle	stroke="black" stroke-width="30" fill="none"  cx="274" cy="274" r="248"/>
+		<use href="#circleText"/>
+	</symbol>
+<!-- September -->
+	<symbol id="dango">
+		<g stroke="#907040" stroke-width="1" fill="#f0d0a0" stroke-linejoin="round" stroke-linecap="round">
+			<circle stroke="#907040" stroke-width="1" fill="white" cx="18" cy="27" r="4.6"/>
+			<circle stroke="#907040" stroke-width="1" fill="white" cx="13" cy="35" r="4.6"/>
+			<circle stroke="#907040" stroke-width="1" fill="white" cx="23" cy="35" r="4.6"/>
+			<circle stroke="#907040" stroke-width="1" fill="white" cx="9"  cy="43" r="4.6"/>
+			<circle stroke="#907040" stroke-width="1" fill="white" cx="18" cy="43" r="4.6"/>
+			<circle stroke="#907040" stroke-width="1" fill="white" cx="27" cy="43" r="4.6"/>
+			<path d="M 0,47 L 36,47 L 36,54 L 0,54 Z"/>
+			<path d="M 5,54 L 5,70 L 31,70 L 31,54 Z"/>
+			<circle stroke="#907040" stroke-width="1" fill="#D0B080" cx="18" cy="62" r="4"/>
+		</g>
+		<g stroke="#705020" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 43,46 C 43,42 43,33 41,29"/>
+			<path d="M 45,46 C 46,36 46,31 46,26"/>
+		</g>
+		<g stroke="#907040" stroke-width="1" fill="#e0f0d0" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 38,44 L 40,70 L 48,70 L 50,44 L 38,44"/>
+		</g>
+		<g stroke="#e0d0a0" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 41,29 C 39,26 31,24 29,27"/>
+			<path d="M 41,29 C 36,24 29,23 27,26"/>
+			<path d="M 41,29 C 37,23 30,22 26,23"/>
+			<path d="M 41,29 C 36,22 29,20 24,21"/>
+			<path d="M 41,29 C 40,25 34,18 26,18"/>
+			<path d="M 46,26 C 43,19 35,11 25,11"/>
+			<path d="M 46,26 C 42,18 34,10 25,13"/>
+			<path d="M 46,26 C 45,16 34,9 25,9"/>
+			<path d="M 46,26 C 46,18 33,5 23,7"/>
+			<path d="M 46,26 C 45,13 32,4 23,4"/>
+			<path d="M 46,26 C 46,15 37,5 26,1"/>
+		</g>
+	</symbol>
+	<symbol id="cloud">
+		<radialGradient id="GradientCloud">
+			<stop offset="0%" stop-color="black" stop-opacity="30%"/>
+			<stop offset="100%" stop-color="black" stop-opacity="10%"/>
+		</radialGradient>
+		<g stroke-width="0" fill="url(#GradientCloud)">
+			<path d="M 11,22 C 11,15 47,17 47,22 C 47,27 35,26 35,29 C 35,33 66,30 66,36 C 66,41 23,40 23,34 C 23,29 29,32 29,28 C 29,21 11,27 11,22 Z"/>
+		</g>
+	</symbol>
+	<symbol id="CoderDojoAtsugi-09">
+		<path	stroke="black" stroke-width="0" fill="white"			  d="M 274,34 A 240,240 0 1,1 274,514 Z"/>
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)" d="M 274,34 A 240,240 0 1,0 274,514 Z"/>
+		<circle	stroke="black" stroke-width="0" fill="url(#GradientDojo)" cx="274" cy="154" r="120"/>
+		<use href="#zero"/>
+		<circle	stroke="black" stroke-width="0" fill="white" cx="274" cy="394" r="120"/>
+		<use href="#one"/>
+		<circle	stroke="white" stroke-width="30" fill="none"  cx="274" cy="274" r="248"/>
+		<use href="#circleTextBlack"/>
+	</symbol>
+<!-- October -->
+	<symbol id="hat">
+		<path fill="black" stroke-width="0" d="M 2,24 C 3,22 14,21 18,20 C 21,18 21,18 22,15 C 25,11 35,3 38,3 C 43,3 54,16 51,20 C 50,21 48,19 46,18 C 46,18 46,21 46,21 C 44,23 45,23 46,26 C 50,26 60,32 59,34 C 55,41 0,30 2,24 Z"/>
+		<path fill="#ba55d3" stroke="#ba55d3" stroke-width="0.5" d="M 22,15 C 21,16 19,18 18,20 C 22,24 41,26 46,26 C 46,26 46,21 46,21 C 40,21 27,18 22,15 Z"/>
+	</symbol>
+	<symbol id="CoderDojoAtsugi-10">
+		<path	stroke="black" stroke-width="0" fill="#ff8c00"			  d="M 274,34 A 240,240 0 1,1 274,514 Z"/>
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)" d="M 274,34 A 240,240 0 1,0 274,514 Z"/>
+		<circle	stroke="black" stroke-width="0" fill="url(#GradientDojo)" cx="274" cy="154" r="120"/>
+		<use href="#zero"/>
+		<circle	stroke="black" stroke-width="0" fill="#ff8c00" cx="274" cy="394" r="120"/>
+		<use href="#one"/>
+		<circle	 stroke="green" stroke-width="30" fill="none"  cx="274" cy="274" r="248"/>
+		<use href="#circleText"/>
+	</symbol>
+<!-- November -->
+	<symbol id="persimmonStem">
+		<path stroke-width="0" fill="green" d="M 5,32 C 16,30 23,20 37,23 C 33,16 58,16 61,11 C 66,16 89,16 86,23 C 97,19 110,31 118,32 C 109,34 105,46 86,42 C 103,54 75,64 61,70 C 36,59 23,52 37,42 C 37,42 5,32 5,32 Z"/>
+		<path stroke-width="0" fill="brown" d="M 49,32 C 51,26 73,26 73,33 C 73,42 47,39 49,32 Z"/>
+		<path stroke-width="0" fill="#981818" d="M 59,31 C 63,24 72,0 74,0 C 79,0 82,2 82,3 C 82,7 67,29 65,32"/>
+	</symbol>
+	<symbol id="CoderDojoAtsugi-11">
+		<path	stroke="black" stroke-width="0" fill="#ff8c00"			  d="M 274,34 A 240,240 0 1,1 274,514 Z"/>
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)" d="M 274,34 A 240,240 0 1,0 274,514 Z"/>
+		<circle	stroke="black" stroke-width="0" fill="url(#GradientDojo)" cx="274" cy="154" r="120"/>
+		<use href="#zero"/>
+		<circle	stroke="black" stroke-width="0" fill="#ff8c00" cx="274" cy="394" r="120"/>
+		<use href="#one"/>
+		<circle	 stroke="#ff8c00" stroke-width="30" fill="none"  cx="274" cy="274" r="248"/>
+		<use href="#circleText"/>
+	</symbol>
+<!-- December -->
+	<symbol id="bell">
+		<g stroke="black" stroke-width="1" fill="none" stroke-linejoin="round" stroke-linecap="round">
+			<path fill="gold" d="M 35,64 C 35,61 40,58 42,56 C 40,40 45,32 59,29 C 71,31 78,42 77,56 C 80,57 82,62 82,64 C 75,68 44,69 35,64 Z"/>
+			<path d="M 40,62 C 51,56 66,56 78,62"/>
+			<path d="M 51,60 C 52,68 66,68 67,60"/>
+		</g>
+		<g stroke="black" stroke-width="1" fill="none" stroke-linejoin="round" stroke-linecap="round">
+			<path fill="red" d="M 5,42 C 9,23 35,18 58,24 C 85,17 107,27 111,41 C 107,41 98,43 97,43 C 96,44 92,53 91,58 C 87,51 70,34 58,27 C 45,34 29,53 25,59 C 23.33,53.67 21.67,48.33 20,43 C 15,42.67 10,42.33 5,42 Z"/>
+			<path fill="red" d="M 58,16 C 37,2 18,0 16,9 C 15.5,10.5 17,13 18,15 C 18,17 15,25 20,28 C 22,29 58,29 58,29 C 63,29 93,31 96,28 C 99,25 99.75,19.75 97,16 C 100,13 101,9 99,7 C 93,1 81,2 58,16 Z"/>
+			<path fill="red" d="M 58,13 C 66,13 67,13 67,21 C 67,30 66,30 58,30 C 50,30 49,30 49,21 C 49,13 50,13 58,13 Z"/>
+		</g>
+	</symbol>
+	<symbol id="sock">
+		<g stroke="black" stroke-width="0.5" stroke-linejoin="round" stroke-linecap="round">
+			<path fill="#f02040" d="M 13,12 C 14,22 15,37 17,42 C 21,51 46,56 52,46 C 55,38 42,36 40,31 C 38,25 39,19 38,12 Z"/>
+			<path fill="white" d="M 11,9 C 11,3 21,4 26,4 C 31,4 40,3 40,9 C 40,22 34,14 32,14 C 30,14 28,17 25,17 C 22,17 21,14 18,14 C 16,14 11,22 11,9 Z"/>
+		</g>
+	</symbol>
+	<symbol id="stick">
+		<pattern id="patternRedWhite" x="0" y="0" width="12" height="12" patternUnits="userSpaceOnUse">
+			<rect x="0" y="0" width="12" height="12" stroke-width="0" fill="white"/>
+			<polygon points="6,0 12,0 12,6" stroke-width="0" fill="red"/>
+			<polygon points="0,0 12,12 6,12 0,6" stroke-width="0" fill="red"/>
+		</pattern>
+		<g stroke="url(#patternRedWhite)" stroke-width="1" fill="none" stroke-linejoin="round" stroke-linecap="round">
+			<path stroke-width="5" d="M 1,12 C 1,8 4,4 9,4 C 14,4 17,8 17,13 L 17,34"/>
+		</g>
+	</symbol>
+	<symbol id="box">
+		<g stroke="black" stroke-width="0" fill="#30d030" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 3,33 L 6,70 L 58,70 L 61,33 Z"/>
+			<path d="M 0,22 L 64,22 L 64,35 L 0,35 Z"/>
+		</g>
+		<g stroke="black" stroke-width="0" fill="#ff0000" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 26,21 L 40,21 L 40,71 L 26,71 Z"/>
+			<path d="M 3,35 L 61,35 L 60,46 L 4,46 Z"/>
+		</g>
+		<g stroke="black" stroke-width="0" fill="#ff0000" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 33,19 C 39,14 55,3 59,6 C 62,9 61,14 59,17 C 57,20 37,21 33,21 C 29,21 8,19 6,17 C 3,14 2,9 6,6 C 13,2 28,16 33,19 Z"/>
+		</g>
+		<g stroke="black" stroke-width="0" fill="#ffffff" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 36,19 C 44,16 53,11 55,14 C 56,16 41,18 36,19 Z"/>
+			<path d="M 29,19 C 24,16 12,10 10,13 C 9,15 22,17 29,19 Z"/>
+		</g>
+	</symbol>
+	<symbol id="hiiragi">
+		<g stroke="black" stroke-width="0" fill="#008000" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 31,26 C 27,22 27,17 27,13 C 23,17 19,16 19,10 C 16,12 13,11 11,8 C 10,10 6,12 3,12 C 5,15 5,19 5,21 C 9,20 12,21 10,27 C 15,23 19,25 19,31 C 21,28 26,25 31,26 Z"/>
+			<path d="M 45,22 C 48,18 47,13 47,9 C 53,13 54,10 54,5 C 57,6 60,5 61,2 C 64,4 67,4 70,4 C 69,7 68,10 69,13 C 66,13 64,15 65,20 C 60,17 57,18 58,26 C 54,22 52,21 45,22 Z"/>
+			<path d="M 40,36 C 43,40 46,41 50,43 C 46,45 46,47 50,50 C 47,51 47,54 48,56 C 46,56 44,59 43,61 C 42,58 39,57 36,57 C 39,54 37,52 33,51 C 38,49 37,46 32,44 C 36,43 39,40 40,36 Z"/>
+		</g>
+		<g stroke-width="1" stroke="#80f080" fill="none" stroke-linejoin="round" stroke-linecap="round">
+			<path d="M 23,22 C 21,19 15,16 9,14"/>
+			<path d="M 51,17 C 53,14 58,10 63,8"/>
+			<path d="M 42,42 C 43,45 44,51 43,54"/>
+		</g>
+		<radialGradient id="rgHiiragiRed">
+			<stop offset="0%" stop-color="#ff0000"/>
+			<stop offset="80%" stop-color="#ff0000"/>
+			<stop offset="100%" stop-color="#c00000"/>
+		</radialGradient>
+		<radialGradient id="rgHiiragiWhite" cx="0.6" cy="0.35">
+			<stop offset="0%" stop-color="#ffffff" stop-opacity="90%"/>
+			<stop offset="25%" stop-color="#ffffff" stop-opacity="70%"/>
+			<stop offset="50%" stop-color="#ffffff" stop-opacity="0%"/>
+		</radialGradient>
+		<g >
+			<circle stroke-width="0" fill="url(#rgHiiragiRed)"   cx="38" cy="23" r="4.7"/>
+			<circle stroke-width="0" fill="url(#rgHiiragiWhite)" cx="38" cy="23" r="4.7"/>
+			<circle stroke-width="0" fill="url(#rgHiiragiRed)"   cx="34" cy="33" r="4.9"/>
+			<circle stroke-width="0" fill="url(#rgHiiragiWhite)" cx="34" cy="33" r="4.9"/>
+			<circle stroke-width="0" fill="url(#rgHiiragiRed)"   cx="45" cy="31" r="4.8"/>
+			<circle stroke-width="0" fill="url(#rgHiiragiWhite)" cx="45" cy="31" r="4.8"/>
+		</g>
+	</symbol>
+	<symbol id="CoderDojoAtsugi-12">
+		<path	stroke="black" stroke-width="0" fill="black"			  d="M 274,34 A 240,240 0 1,1 274,514 Z"/>
+		<path	stroke="black" stroke-width="0" fill="url(#GradientDojo)" d="M 274,34 A 240,240 0 1,0 274,514 Z"/>
+		<circle	stroke="black" stroke-width="0" fill="url(#GradientDojo)" cx="274" cy="154" r="120"/>
+		<use href="#zero"/>
+		<circle	stroke="black" stroke-width="0" fill="black" cx="274" cy="394" r="120"/>
+		<use href="#one"/>
+		<circle	stroke="green" stroke-width="30" fill="none"  cx="274" cy="274" r="248"/>
+		<use href="#circleText"/>
+	</symbol>
+<!-- main -->
+	<symbol id="Normal" viewBox="-50 -100 660 660" clip-path="url(#clipFrame)">
+		<use href="#CoderDojoAtsugi"/>
+		<use href="#atsugi"/>
+		<use href="#ayu" transform="translate(145, 330) scale(6.5,6.5)"/>
+	</symbol>
+	<symbol id="January" viewBox="-50 -100 660 660" clip-path="url(#clipFrame)">
+		<use href="#CoderDojoAtsugi-01"/>
+		<use href="#atsugi"/>
+		<use href="#fuji"	transform="translate(-170, 220) scale(6,6)"/>
+		<use href="#ayu" transform="translate(145, 330) scale(6.5,6.5)"/>
+	</symbol>
+	<symbol id="February" viewBox="-50 -100 660 660" clip-path="url(#clipFrame)">
+		<use href="#CoderDojoAtsugi-02" transform="translate(0, 0)"/>
+		<use href="#atsugi"/>
+		<use href="#ayu" transform="translate(145, 320) scale(6.5,6.5)"/>
+		<use href="#ribbon" transform="translate(255, -115) rotate(35 0,100) scale(3.5,3.5)"/>
+	</symbol>
+	<symbol id="March" viewBox="-50 -100 660 660" clip-path="url(#clipFrame)">
+		<use href="#CoderDojoAtsugi-03"/>
+		<use href="#atsugi"/>
+		<use href="#ayu" transform="translate(145, 330) scale(6.5,6.5)"/>
+		<use href="#ume" transform="scale(4,4) translate(0,-10)"/>
+		<use href="#ume" transform="scale(4,4) translate(10,-25)"/>
+		<use href="#ume" transform="scale(4,4) translate(30,-30)"/>
+		<use href="#uguisu" transform="translate(460,-40) scale(2,2) rotate(20)"/>
+	</symbol>
+	<symbol id="April" viewBox="-50 -100 660 660" clip-path="url(#clipFrame)">
+		<use href="#CoderDojoAtsugi-04"/>
+		<use href="#atsugi"/>
+		<use href="#ayu" transform="translate(145, 330) scale(6.5,6.5)"/>
+		<use href="#peachFlower" transform="scale(1.5,1.5) translate(10,60)"/>
+		<use href="#peachFlower" transform="scale(1.5,1.5) translate(40,40)"/>
+		<use href="#peachFlower" transform="scale(1.5,1.5) translate(90,10)"/>
+		<use href="#peachFlower" transform="scale(1.5,1.5) translate(120,-20)"/>
+		<use href="#peachFlower" transform="scale(1.5,1.5) translate(60, 0)"/>
+		<use href="#tsutsujiFlower" transform="scale(2,2) translate(0,180)"/>
+	</symbol>
+	<symbol id="May" viewBox="-50 -100 660 660" clip-path="url(#clipFrame)">
+		<use href="#CoderDojoAtsugi-05"/>
+		<use href="#atsugi"/>
+		<use href="#ayu" transform="translate(145, 330) scale(6.5,6.5)"/>
+		<use href="#kabuto" transform="translate(30, -85) scale(5,3.5)"/>
+	</symbol>
+	<symbol id="June" viewBox="-50 -100 660 660" clip-path="url(#clipFrame)">
+		<use href="#CoderDojoAtsugi-06"/>
+		<use href="#atsugi"/>
+		<use href="#ayu" transform="translate(145, 400) scale(3.5,3.5) rotate(30)"/>
+		<use href="#ayu" transform="translate(195, 435) scale(3,3) rotate(-10)"/>
+		<use href="#ayu" transform="translate(225, 430) scale(3.4,3.4) rotate(0)"/>
+		<use href="#ayu" transform="translate(245, 420) scale(3.8,3.8) rotate(-15)"/>
+		<use href="#ayu" transform="translate(285, 410) scale(4.0,4.0) rotate(-20)"/>
+		<use href="#ayu" transform="translate(335, 385) scale(3.7,3.7) rotate(-10)"/>
+	</symbol>
+	<symbol id="July" viewBox="-50 -100 660 660" clip-path="url(#clipFrame)">
+		<use href="#CoderDojoAtsugi-07"/>
+		<use href="#atsugi"/>
+		<use href="#tanabata" transform="translate(290, -60) scale(-2.8,3.8)"/>
+		<use href="#ayu" transform="translate(145, 330) scale(6.5,6.5)"/>
+	</symbol>
+	<symbol id="August" viewBox="-50 -100 660 660" clip-path="url(#clipFrame)">
+		<use href="#CoderDojoAtsugi-08"/>
+		<use href="#atsugi"/>
+		<use href="#ayu" transform="translate(145, 330) scale(6.5,6.5)"/>
+		<use href="#nasu" transform="translate(-70,270) scale(3.5,3.5)"/>
+		<use href="#kyuri" transform="translate(-70,270) scale(3.5,3.5)"/>
+	</symbol>
+	<symbol id="September" viewBox="-50 -100 660 660" clip-path="url(#clipFrame)">
+		<use href="#CoderDojoAtsugi-09"/>
+		<use href="#atsugi"/>
+		<use href="#ayu" transform="translate(145, 330) scale(6.5,6.5)"/>
+		<use href="#dango" transform="translate(-50,270) scale(4,4)"/>
+		<use href="#cloud" transform="translate(-50,-100) scale(10,10)"/>
+	</symbol>
+	<symbol id="October" viewBox="-50 -100 660 660" clip-path="url(#clipFrame)">
+		<use href="#CoderDojoAtsugi-10"/>
+		<use href="#atsugi"/>
+		<use href="#ayu" transform="translate(145, 330) scale(6.5,6.5)"/>
+		<use href="#hat" transform="translate(275, -150) rotate(20) scale(6,6)"/>
+	</symbol>
+	<symbol id="November" viewBox="-50 -100 660 660" clip-path="url(#clipFrame)">
+		<g transform="scale(1,0.8)">
+			<use href="#CoderDojoAtsugi-11"/>
+			<use href="#atsugi"/>
+			<use href="#persimmonStem"	transform="translate(150, -50) scale(2.2,2.2)"/>
+		</g>
+		<use href="#ayu" transform="translate(145, 250) scale(6.5,6.5)"/>
+	</symbol>
+	<symbol id="December" viewBox="-50 -100 660 660" clip-path="url(#clipFrame)">
+		<use href="#CoderDojoAtsugi-12"/>
+		<use href="#atsugi"/>
+		<use href="#ayu" transform="translate(320, 400) scale(3.8,3.8) rotate(-20)"/>
+		<use href="#bell"	transform="translate(135, -50) scale(2.5,2.5)"/>
+		<use href="#sock" transform="translate(100, 420) scale(2.5,2.5)"/>
+		<use href="#stick" transform="translate(480, 100) scale(4,4) rotate(20)"/>
+		<use href="#box" transform="translate(-40, 300) scale(1.8,1.5) rotate(-10)"/>
+		<use href="#hiiragi" transform="translate(-30, 70) scale(2.5,2.5)"/>
+	</symbol>
+</defs>
+</svg>
+</head>
+<body>
+<table width="100%">
+<caption><b><font size="+5">2025年(令和7年)カレンダー (CoderDojo厚木)</font></b></caption>
+<tr>
+<td>
+<table class="calendar">
+	<caption>1月</caption>
+	<tr><td class="picture" colspan="7">
+		<svg width="100%" height="100%" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+		<use href="#January"/>
+		</svg>
+	</td></tr>
+	<tr><th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th></tr>
+	<tr><td class="na">29</td><td class="na">30</td><td class="na">31</td><td class="holiday">1</td><td>2</td><td>3</td><td>4</td></tr>
+	<tr><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td><td>11</td></tr>
+	<tr><td>12</td><td class="holiday">13</td><td>14</td><td>15</td><td>16</td><td>17</td><td>18</td></tr>
+	<tr><td>19</td><td>20</td><td>21</td><td>22</td><td>23</td><td>24</td><td>25</td></tr>
+	<tr><td>26</td><td>27</td><td>28</td><td>29</td><td>30</td><td>31</td><td class="na">1</td></tr>
+	<tr><td class="na">2</td><td class="na">3</td><td class="na">4</td><td class="na">5</td><td class="na">6</td><td class="na">7</td><td class="na">8</td></tr>
+</table>
+</td><td>
+<table class="calendar">
+	<caption>2月</caption>
+	<tr><td class="picture" colspan="7">
+		<svg width="100%" height="100%" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+		<use href="#February"/>
+		</svg>
+	</td></tr>
+	<tr><th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th></tr>
+	<tr><td class="na">26</td><td class="na">27</td><td class="na">28</td><td class="na">29</td><td class="na">30</td><td class="na">31</td><td>1</td></tr>
+	<tr><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td></tr>
+	<tr><td>9</td><td>10</td><td class="holiday">11</td><td>12</td><td>13</td><td>14</td><td>15</td></tr>
+	<tr><td>16</td><td>17</td><td>18</td><td>19</td><td>20</td><td>21</td><td>22</td></tr>
+	<tr><td class="holiday">23</td><td class="holiday">24</td><td>25</td><td>26</td><td>27</td><td>28</td><td class="na">1</td></tr>
+	<tr><td class="na">2</td><td class="na">3</td><td class="na">4</td><td class="na">5</td><td class="na">6</td><td class="na">7</td><td class="na">8</td></tr>
+</table>
+</td><td>
+<table class="calendar">
+	<caption>3月</caption>
+	<tr><td class="picture" colspan="7">
+		<svg width="100%" height="100%" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+		<use href="#March"/>
+		</svg>
+	</td></tr>
+	<tr><th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th></tr>
+	<tr><td class="na">23</td><td class="na">24</td><td class="na">25</td><td class="na">26</td><td class="na">27</td><td class="na">28</td><td>1</td></tr>
+	<tr><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td></tr>
+	<tr><td>9</td><td>10</td><td>11</td><td>12</td><td>13</td><td>14</td><td>15</td></tr>
+	<tr><td>16</td><td>17</td><td>18</td><td>19</td><td class="holiday">20</td><td>21</td><td>22</td></tr>
+	<tr><td>23</td><td>24</td><td>25</td><td>26</td><td>27</td><td>28</td><td>29</td></tr>
+	<tr><td>30</td><td>31</td><td class="na">1</td><td class="na">2</td><td class="na">3</td><td class="na">4</td><td class="na">5</td></tr>
+</table>
+</td><td>
+<table class="calendar">
+	<caption>4月</caption>
+	<tr><td class="picture" colspan="7">
+		<svg width="100%" height="100%" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+		<use href="#April"/>
+		</svg>
+	</td></tr>
+	<tr><th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th></tr>
+	<tr><td class="na">30</td><td class="na">31</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td></tr>
+	<tr><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td><td>11</td><td>12</td></tr>
+	<tr><td>13</td><td>14</td><td>15</td><td>16</td><td>17</td><td>18</td><td>19</td></tr>
+	<tr><td>20</td><td>21</td><td>22</td><td>23</td><td>24</td><td>25</td><td>26</td></tr>
+	<tr><td>27</td><td>28</td><td class="holiday">29</td><td>30</td><td class="na">1</td><td class="na">2</td><td class="na">3</td></tr>
+	<tr><td class="na">4</td><td class="na">5</td><td class="na">6</td><td class="na">7</td><td class="na">8</td><td class="na">9</td><td class="na">10</td></tr>
+</table>
+</td></tr>
+<tr><td>&nbsp;</td></tr>
+</tr><tr><td>
+<table class="calendar">
+	<caption>5月</caption>
+	<tr><td class="picture" colspan="7">
+		<svg width="100%" height="100%" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+		<use href="#May"/>
+		</svg>
+	</td></tr>
+	<tr><th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th></tr>
+	<tr><td class="na">27</td><td class="na">28</td><td class="na">29</td><td class="na">30</td><td>1</td><td>2</td><td class="holiday">3</td></tr>
+	<tr><td class="holiday">4</td><td class="holiday">5</td><td class="holiday">6</td><td>7</td><td>8</td><td>9</td><td>10</td></tr>
+	<tr><td>11</td><td>12</td><td>13</td><td>14</td><td>15</td><td>16</td><td>17</td></tr>
+	<tr><td>18</td><td>19</td><td>20</td><td>21</td><td>22</td><td>23</td><td>24</td></tr>
+	<tr><td>25</td><td>26</td><td>27</td><td>28</td><td>29</td><td>30</td><td>31</td></tr>
+	<tr><td class="na">1</td><td class="na">2</td><td class="na">3</td><td class="na">4</td><td class="na">5</td><td class="na">6</td><td class="na">7</td></tr>
+</table>
+</td><td>
+<table class="calendar">
+	<caption>6月</caption>
+	<tr><td class="picture" colspan="7">
+		<svg width="100%" height="100%" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+		<use href="#June"/>
+		</svg>
+	</td></tr>
+	<tr><th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th></tr>
+	<tr><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td></tr>
+	<tr><td>8</td><td>9</td><td>10</td><td>11</td><td>12</td><td>13</td><td>14</td></tr>
+	<tr><td>15</td><td>16</td><td>17</td><td>18</td><td>19</td><td>20</td><td>21</td></tr>
+	<tr><td>22</td><td>23</td><td>24</td><td>25</td><td>26</td><td>27</td><td>28</td></tr>
+	<tr><td>29</td><td>30</td><td class="na">1</td><td class="na">2</td><td class="na">3</td><td class="na">4</td><td class="na">5</td></tr>
+	<tr><td class="na">6</td><td class="na">7</td><td class="na">8</td><td class="na">9</td><td class="na">10</td><td class="na">11</td><td class="na">12</td></tr>
+</table>
+</td><td>
+<table class="calendar">
+	<caption>7月</caption>
+	<tr><td class="picture" colspan="7">
+		<svg width="100%" height="100%" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+		<use href="#July"/>
+		</svg>
+	</td></tr>
+	<tr><th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th></tr>
+	<tr><td class="na">29</td><td class="na">30</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td></tr>
+	<tr><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td><td>11</td><td>12</td></tr>
+	<tr><td>13</td><td>14</td><td>15</td><td>16</td><td>17</td><td>18</td><td>19</td></tr>
+	<tr><td>20</td><td class="holiday">21</td><td>22</td><td>23</td><td>24</td><td>25</td><td>26</td></tr>
+	<tr><td>27</td><td>28</td><td>29</td><td>30</td><td>31</td><td class="na">1</td><td class="na">2</td></tr>
+	<tr><td class="na">3</td><td class="na">4</td><td class="na">5</td><td class="na">6</td><td class="na">7</td><td class="na">8</td><td class="na">9</td></tr>
+</table>
+</td><td>
+<table class="calendar">
+	<caption>8月</caption>
+	<tr><td class="picture" colspan="7">
+		<svg width="100%" height="100%" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+		<use href="#August"/>
+		</svg>
+	</td></tr>
+	<tr><th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th></tr>
+	<tr><td class="na">27</td><td class="na">28</td><td class="na">29</td><td class="na">30</td><td class="na">31</td><td>1</td><td>2</td></tr>
+	<tr><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td></tr>
+	<tr><td>10</td><td class="holiday">11</td><td>12</td><td>13</td><td>14</td><td>15</td><td>16</td></tr>
+	<tr><td>17</td><td>18</td><td>19</td><td>20</td><td>21</td><td>22</td><td>23</td></tr>
+	<tr><td>24</td><td>25</td><td>26</td><td>27</td><td>28</td><td>29</td><td>30</td></tr>
+	<tr><td>31</td><td class="na">1</td><td class="na">2</td><td class="na">3</td><td class="na">4</td><td class="na">5</td><td class="na">6</td></tr>
+</table>
+</td></tr>
+<tr><td>&nbsp;</td></tr>
+<tr><td>
+<table class="calendar">
+	<caption>9月</caption>
+	<tr><td class="picture" colspan="7">
+		<svg width="100%" height="100%" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+		<use href="#September"/>
+		</svg>
+	</td></tr>
+	<tr><th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th></tr>
+	<tr><td class="na">31</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td></tr>
+	<tr><td>7</td><td>8</td><td>9</td><td>10</td><td>11</td><td>12</td><td>13</td></tr>
+	<tr><td>14</td><td class="holiday">15</td><td>16</td><td>17</td><td>18</td><td>19</td><td>20</td></tr>
+	<tr><td>21</td><td>22</td><td class="holiday">23</td><td>24</td><td>25</td><td>26</td><td>27</td></tr>
+	<tr><td>28</td><td>29</td><td>30</td><td class="na">1</td><td class="na">2</td><td class="na">3</td><td class="na">4</td></tr>
+	<tr><td class="na">5</td><td class="na">6</td><td class="na">7</td><td class="na">8</td><td class="na">9</td><td class="na">10</td><td class="na">11</td></tr>
+</table>
+</td><td>
+<table class="calendar">
+	<caption>10月</caption>
+	<tr><td class="picture" colspan="7">
+		<svg width="100%" height="100%" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+		<use href="#October"/>
+		</svg>
+	</td></tr>
+	<tr><th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th></tr>
+	<tr><td class="na">28</td><td class="na">29</td><td class="na">30</td><td>1</td><td>2</td><td>3</td><td>4</td></tr>
+	<tr><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td><td>11</td></tr>
+	<tr><td>12</td><td class="holiday">13</td><td>14</td><td>15</td><td>16</td><td>17</td><td>18</td></tr>
+	<tr><td>19</td><td>20</td><td>21</td><td>22</td><td>23</td><td>24</td><td>25</td></tr>
+	<tr><td>26</td><td>27</td><td>28</td><td>29</td><td>30</td><td>31</td><td class="na">1</td></tr>
+	<tr><td class="na">2</td><td class="na">3</td><td class="na">4</td><td class="na">5</td><td class="na">6</td><td class="na">7</td><td class="na">8</td></tr>
+</table>
+</td><td>
+<table class="calendar">
+	<caption>11月</caption>
+	<tr><td class="picture" colspan="7">
+		<svg width="100%" height="100%" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+		<use href="#November"/>
+		</svg>
+	</td></tr>
+	<tr><th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th></tr>
+	<tr><td class="na">26</td><td class="na">27</td><td class="na">28</td><td class="na">29</td><td class="na">30</td><td class="na">31</td><td>1</td></tr>
+	<tr><td>2</td><td class="holiday">3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td></tr>
+	<tr><td>9</td><td>10</td><td>11</td><td>12</td><td>13</td><td>14</td><td>15</td></tr>
+	<tr><td>16</td><td>17</td><td>18</td><td>19</td><td>20</td><td>21</td><td>22</td></tr>
+	<tr><td class="holiday">23</td><td class="holiday">24</td><td>25</td><td>26</td><td>27</td><td>28</td><td>29</td></tr>
+	<tr><td>30</td><td class="na">1</td><td class="na">2</td><td class="na">3</td><td class="na">4</td><td class="na">5</td><td class="na">6</td></tr>
+</table>
+</td><td>
+<table class="calendar">
+	<caption>12月</caption>
+	<tr><td class="picture" colspan="7">
+		<svg width="100%" height="100%" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+		<use href="#December"/>
+		</svg>
+	</td></tr>
+	<tr><th>日</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th><th>土</th></tr>
+	<tr><td class="na">30</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td></tr>
+	<tr><td>7</td><td>8</td><td>9</td><td>10</td><td>11</td><td>12</td><td>13</td></tr>
+	<tr><td>14</td><td>15</td><td>16</td><td>17</td><td>18</td><td>19</td><td>20</td></tr>
+	<tr><td>21</td><td>22</td><td>23</td><td>24</td><td>25</td><td>26</td><td>27</td></tr>
+	<tr><td>28</td><td>29</td><td>30</td><td>31</td><td class="na">1</td><td class="na">2</td><td class="na">3</td></tr>
+	<tr><td class="na">4</td><td class="na">5</td><td class="na">6</td><td class="na">7</td><td class="na">8</td><td class="na">9</td><td class="na">10</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>

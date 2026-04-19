@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Ppoiの生態5</title>
+		<style>body { margin: 0; }</style>
+	</head>
+	<body>
+		<h1>Ppoiはゲームが好きです。<hr></h1>
+		<span id="canvas"></span>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/109/three.min.js"></script>
+		<script>
+			const [WSEG, HSEG] = [64, 32];
+			const renderer = new THREE.WebGLRenderer();
+			const scene = new THREE.Scene();
+			const camera = createCamera();
+			const object = new THREE.Group();
+			const KING_COLOR1 = 0x2020e0;
+			const PAWN_COLOR1 = 0x8080e0;
+			const KING_COLOR2 = 0xe02020;
+			const PAWN_COLOR2 = 0xe08080;
+			const canvas = document.querySelector('#canvas');
+			let field;
+			const dirs = {North: 0, West: 1, South: 2, East: 3};
+			class Field {
+				constructor() {
+					this.field = [];
+					for (let i = 0; i < 5; ++i) {
+						this.field[i] = [];
+						for (let j = 0; j < 5; ++j) { this.field[i][j] = null; }
+					}
+				}
+				get(location) { return this.field[location[1]][location[0]]; }
+				set(location, value) { this.field[location[1]][location[0]] = value; }
+				inRange(location) { return location[0] >= 0 && location[0] <= 4 && location[1] >= 0 && location[1] <= 4; }
+				slipeLocation(location, dir) {
+					if (!this.inRange(location)) { return null; }
+					const dx = (dir == dirs.West) ?-1:(dir == dirs.East) ? 1:0;
+					const dy = (dir == dirs.North)? 1:(dir == dirs.South)?-1:0;
+					if (dx == 0 && dy == 0) { throw 'Error'; }
+					let newLocation = [location[0] + dx, location[1] + dy];
+					if (!this.inRange(newLocation) || this.get(newLocation) != null) { return null; }
+					let newLocation2 = [newLocation[0] + dx, newLocation[1] + dy];
+					while (this.inRange(newLocation2) && this.get(newLocation2) == null) {
+						newLocation = [newLocation2[0], newLocation2[1]];
+						newLocation2 = [newLocation[0] + dx, newLocation[1] + dy];
+					}
+					return newLocation;
+				}
+			}
+			
+			const materialMap = new Map();
+			function createMaterial(color) {
+				let material = materialMap.get(color);
+				if (material == null) {
+					material = new THREE.MeshStandardMaterial({color: color});
+					materialMap.set(color, material);
+				}
+				return material;
+			}
+			const sphereGeometry = new THREE.SphereGeometry(1, WSEG, HSEG);
+			const cylinderGeometry = new THREE.CylinderGeometry(1.2, 0.8, 10.0, WSEG, 1, false); 
+
+			class Ppoi {
+				constructor(color, location, dir) {
+					this.color = color;
+					this.ppoi = this.createPpoi();
+					this.ppoi.scale.set(0.7, 0.7, 0.7);
+					const rad = this.getDiffDir(dirs.North, dir);
+					this.ppoi.rotation.z = rad;
+					this.setDir(dir);
+					this.ppoi.position.x = (location[0]-2)*20;
+					this.ppoi.position.y = (location[1]-2)*20;
+					this.setLocation(location);
+				}
+				getColor() { return this.color; }
+				getPpoi() { return this.ppoi; }
+				getDir() { return this.dir; }
+				getLocation() { return this.location; }
+				getDiffDir(srcDir, dstDir) {
+					if (srcDir == dstDir) { return 0; }
+					if 		((srcDir == dirs.North	&& dstDir == dirs.West)
+						||	(srcDir == dirs.West	&& dstDir == dirs.South)
+						||	(srcDir == dirs.South	&& dstDir == dirs.East)
+						||	(srcDir == dirs.East	&& dstDir == dirs.North)) {
+						return Math.PI/2;
+					}
+					else if ((srcDir == dirs.North	&& dstDir == dirs.East)
+						||	(srcDir == dirs.East	&& dstDir == dirs.South)
+						||	(srcDir == dirs.South	&& dstDir == dirs.West)
+						||	(srcDir == dirs.West	&& dstDir == dirs.North)) {
+						return -Math.PI/2;
+					}
+					else if ((srcDir == dirs.North	&& dstDir == dirs.South)
+						||	(srcDir == dirs.South	&& dstDir == dirs.North)
+						||	(srcDir == dirs.East	&& dstDir == dirs.West)
+						||	(srcDir == dirs.West	&& dstDir == dirs.East)) {
+						return Math.PI;
+					}
+				}
+				getDiffLocation(srcLocation, dstLocation) { return [dstLocation[0]-srcLocation[0], dstLocation[1]-srcLocation[1]]; }
+				setDir(dir) { this.dir = dir; }
+				setLocation(location) { this.location = location; }
+				animateTurn(targetDir, rate) {
+					const rad = this.getDiffDir(this.dir, targetDir);
+					if (rad == 0) { return; }
+					this.ppoi.rotation.z += rad*rate;
+				}
+				animateMove(targetLocation, rate) {
+					let distance = this.getDiffLocation(this.location, targetLocation);
+					this.ppoi.position.x += distance[0]*rate*20;
+					this.ppoi.position.y += distance[1]*rate*20;
+				}
+				createPpoi() {
+					const ppoi = new THREE.Group();
+					const body  = new THREE.Mesh(sphereGeometry, createMaterial(this.color));
+					body.scale.set(8, 10, 4); 
+					body.position.set ( 0.0,   0.0,  0.0);
+					const lEye  = new THREE.Mesh(sphereGeometry, createMaterial(0x646496));
+					lEye.rotation.set(-0.2, -0.3, 0);
+					lEye.scale.set(3.6, 4.5, 1.8);
+					lEye.position.set (-4.0,   4.0,  2.0);
+					const rEye  = new THREE.Mesh(sphereGeometry, createMaterial(0x646496));
+					rEye.rotation.set(-0.2, 0.3, 0);
+					rEye.scale.set(3.6, 4.5, 1.8); 
+					rEye.position.set ( 4.0,   4.0,  2.0);
+					const tail  = new THREE.Mesh(cylinderGeometry, createMaterial(0x303030));
+					tail.position.set ( 0.0, -11.0, -1.0);
+					const tail2 = new THREE.Mesh(sphereGeometry, createMaterial(0x303030));
+					tail2.scale.set(0.8, 0.8, 0.8);
+					tail2.position.set( 0.0, -16.0, -1.0);
+					ppoi.add(body, lEye, rEye, tail, tail2);
+					return ppoi;
+				}
+			}
+			function createArena() {
+				const points = [];
+				for (let x = 0; x <= 5; ++x) {
+					points.push(new THREE.Vector3(x*20-50, -50,  10));
+					points.push(new THREE.Vector3(x*20-50,  50,  10));
+					points.push(new THREE.Vector3(x*20-50, -50, -10));
+					points.push(new THREE.Vector3(x*20-50,  50, -10));
+					
+					points.push(new THREE.Vector3(x*20-50, -50,  10));
+					points.push(new THREE.Vector3(x*20-50, -50, -10));
+					points.push(new THREE.Vector3(x*20-50,  50,  10));
+					points.push(new THREE.Vector3(x*20-50,  50, -10));
+				}
+				for (let y = 0; y <= 5; ++y) {
+					points.push(new THREE.Vector3(-50, y*20-50,  10));
+					points.push(new THREE.Vector3( 50, y*20-50,  10));
+					points.push(new THREE.Vector3(-50, y*20-50, -10));
+					points.push(new THREE.Vector3( 50, y*20-50, -10));
+					
+					points.push(new THREE.Vector3(-50, y*20-50,  10));
+					points.push(new THREE.Vector3(-50, y*20-50, -10));
+					points.push(new THREE.Vector3( 50, y*20-50,  10));
+					points.push(new THREE.Vector3( 50, y*20-50, -10));
+				}
+				return new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: 0xffffff }));
+			}
+			function createLight() {
+				const light = new THREE.DirectionalLight(0xffffff, 2);
+				light.position.set(1, 1, 1);
+				return light;
+			}
+			function createAmbientLight() { return new THREE.AmbientLight(0x999999, 2.0); }
+			function getWidth() { return window.innerWidth; }
+			function getHeight() { return window.innerHeight; }
+//			function getWidth() { return 500; }
+//			function getHeight() { return 500; }
+			function createCamera() {
+				const camera = new THREE.PerspectiveCamera(75, getWidth() / getHeight(), 1, 1000);
+				camera.position.set(0, 0, 100);
+				camera.lookAt(new THREE.Vector3(0, 0, 0));
+				return camera;
+			}
+
+			let animating		= false;
+			let targetPpoi		= null;
+			let targetDir		= null;
+			let targetLocation	= null;
+			let rotateCount		= 0;
+			let rotateSum		= 0;
+			let moveCount		= 0;
+			let moveSum			= 0;
+			let waitCount		= 0;
+			let waitSum			= 0;
+			let turn1			= true;
+			function animate() {
+				if (animating) {
+					if (rotateCount < rotateSum) {
+						++rotateCount;
+						targetPpoi.animateTurn(targetDir, 1.0/rotateSum);
+					}
+					else if (moveCount < moveSum) {
+						++moveCount;
+						targetPpoi.animateMove(targetLocation, 1.0/moveSum);
+					}
+					else if (waitCount < waitSum) {
+						++waitCount;
+					}
+					else {
+						animating = false;
+						field.set(targetPpoi.getLocation(), null);
+						targetPpoi.setDir(targetDir);
+						targetPpoi.setLocation(targetLocation);
+						field.set(targetLocation, targetPpoi);
+					}
+				}
+				else {
+					targetPpoi = null;
+					targetDir = null;
+					targetLocation = null;
+					while (targetLocation == null) {
+						const location = [Math.trunc(Math.random()*5), Math.trunc(Math.random()*5)];
+						targetPpoi = field.get(location);
+						if (!(targetPpoi instanceof Ppoi)) { continue; }
+						if (turn1  && (targetPpoi.getColor() != KING_COLOR1 && targetPpoi.getColor() != PAWN_COLOR1)) { continue; }
+						if (!turn1 && (targetPpoi.getColor() != KING_COLOR2 && targetPpoi.getColor() != PAWN_COLOR2)) { continue; }
+						targetDir = [dirs.North, dirs.West, dirs.South, dirs.East][Math.trunc(Math.random()*4)];
+						targetLocation = field.slipeLocation(location, targetDir);
+					}
+					turn1 = !turn1;
+					rotateCount = 0;
+					let diffDir = targetPpoi.getDiffDir(targetPpoi.getDir(), targetDir);
+					rotateSum = (diffDir == 0)?0:(diffDir == Math.PI)?60:30;
+					moveCount = 0;
+					let diffLocation = targetPpoi.getDiffLocation(targetPpoi.getLocation(), targetLocation);
+					moveSum = Math.abs(diffLocation[0] + diffLocation[1])*40;
+					console.log(targetPpoi.getDir() + "->" + targetDir + ', [' + targetPpoi.getLocation() + "] -> [" + targetLocation + ']');
+					waitCount = 0;
+					waitSum = Math.trunc(Math.random()*100) + 10;
+					animating = true;
+				}
+				renderer.render(scene, camera);
+				requestAnimationFrame(animate);
+			}
+
+			let dragging = false;
+			let mousePos = [0, 0];
+			function moveReset(event) {
+				event.preventDefault();
+				object.rotation.x = 0;
+				object.rotation.y = 0;
+			}
+			function moveBegin(event) {
+				event.preventDefault();
+				dragging = true;
+				mousePos = [event.pageX, event.pageY];
+			}
+			function moveEnd(event) {
+				event.preventDefault();
+				dragging = false;
+			}
+			function move(event) {
+				event.preventDefault();
+				if (!dragging) { return; }
+				object.rotation.x += Math.PI*(event.pageY - mousePos[1])/1000;
+				object.rotation.y += Math.PI*(event.pageX - mousePos[0])/1000;
+				mousePos = [event.pageX, event.pageY];
+			}
+/*
+			function touchBegin(event) {
+				event.preventDefault();
+				dragging = true;
+				mousePos = [event.changedTouches[0].pageX, event.changedTouches[0].pageY];
+			}
+			function touchEnd(event) {
+				event.preventDefault();
+				dragging = false;
+			}
+			function touchMove(event) {
+				event.preventDefault();
+				if (!dragging) { return; }
+				object.rotation.x += Math.PI*(event.changedTouches[0].pageY - mousePos[1])/1000;
+				object.rotation.y += Math.PI*(event.changedTouches[0].pageX - mousePos[0])/1000;
+				mousePos = [event.changedTouches[0].x, event.changedTouches[0].y];
+			}
+*/
+			function main() {
+				renderer.setSize(getWidth(), getHeight());
+				renderer.setClearColor(0x222222);
+				canvas.appendChild(renderer.domElement);
+				
+				scene.add(createLight());
+				scene.add(createAmbientLight());
+
+				object.add(createArena());
+				field = new Field();
+				for (let i = 0; i < 5; ++i) {
+					const ppoi = new Ppoi((i == 2)?KING_COLOR1:PAWN_COLOR1, [i, 0], dirs.North);
+					field.set([i, 0], ppoi);
+					object.add(ppoi.getPpoi());
+				}
+				for (let i = 0; i < 5; ++i) {
+					const ppoi = new Ppoi((i == 2)?KING_COLOR2:PAWN_COLOR2, [i, 4], dirs.South);
+					field.set([i, 4], ppoi);
+					object.add(ppoi.getPpoi());
+				}
+				
+				scene.add(object);
+				renderer.render(scene, camera);
+
+				window.addEventListener('resize', () => {
+					renderer.setSize(getWidth(), getHeight());
+					camera.aspect = getWidth() / getHeight();
+					camera.updateProjectionMatrix();
+				});
+				
+				canvas.addEventListener('dblclick',		moveReset);
+				canvas.addEventListener('mousedown',	moveBegin);
+				canvas.addEventListener('mouseup',		moveEnd);
+				canvas.addEventListener('mouseout',		moveEnd);
+				canvas.addEventListener('mousemove',	move);
+
+/*
+				canvas.addEventListener('touchstart',	touchBegin);
+				canvas.addEventListener('touchend',		touchEnd);
+				canvas.addEventListener('touchmove',	touchMove);
+*/
+				animate();
+			}
+			
+			main();
+		</script>
+	</body>
+</html>

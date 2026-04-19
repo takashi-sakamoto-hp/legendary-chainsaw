@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>(番外編)時を超えるPpoi</title>
+	</head>
+	<body>
+		<h1>(番外編)時を超えるPpoi</h1><hr style="margin-top: 0; margin-bottom: 0;">
+		<table width="100%">
+			<tr><td><font color="red">よい子のみんなへ 画面を見るときは部屋を明るくして離れて見てね</font></td></tr>
+			<tr><td align="center">
+				<button id="past">1年前へ</button>&nbsp;&nbsp;
+				<font size="+2"><b><span id="clock" style="margin-top: 0;"></span></b></font>&nbsp;&nbsp;
+				<button id="future">1年後へ</button>&nbsp;&nbsp;&nbsp;&nbsp;
+				<a href="https://youtu.be/oLC1fZJ1Lgs" onclick="window.open('https://youtu.be/oLC1fZJ1Lgs', 'BGM', 'width=500,height=300,noopener'); return false;">BGM</a>
+			</td></tr>
+		</table>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/109/three.min.js"></script>
+		<script>
+			const [WSEG, HSEG] = [64, 32];
+			const sphereGeometry = new THREE.SphereGeometry(1, WSEG, HSEG);
+			const cylinderGeometry = new THREE.CylinderGeometry(1.2, 0.8, 10.0, WSEG, 1, false); 
+			const renderer = new THREE.WebGLRenderer();
+			const scene = new THREE.Scene();
+			const camera = createCamera();
+			const light = createLight();
+			const ambientLight = createAmbientLight();
+			const materialMap = new Map();
+			const object = createPpoi();
+			function createMaterial(color) {
+				let material = materialMap.get(color);
+				if (material == null) {
+					material = new THREE.MeshStandardMaterial({color: color});
+					materialMap.set(color, material);
+				}
+				return material;
+			}
+			function createPpoi() {
+				const ppoi = new THREE.Group();
+				const body  = new THREE.Mesh(sphereGeometry, createMaterial(0x9696c8));
+				body.scale.set(8, 10, 4); 
+				body.position.set ( 0.0,   0.0,  0.0);
+				const lEye  = new THREE.Mesh(sphereGeometry, createMaterial(0x646496));
+				lEye.rotation.set(-0.2, -0.3, 0);
+				lEye.scale.set(3.6, 4.5, 1.8);
+				lEye.position.set (-4.0,   4.0,  2.0);
+				const rEye  = new THREE.Mesh(sphereGeometry, createMaterial(0x646496));
+				rEye.rotation.set(-0.2, 0.3, 0);
+				rEye.scale.set(3.6, 4.5, 1.8); 
+				rEye.position.set ( 4.0,   4.0,  2.0);
+				const tail  = new THREE.Mesh(cylinderGeometry, createMaterial(0x303030));
+				tail.position.set ( 0.0, -11.0, -1.0);
+				const tail2 = new THREE.Mesh(sphereGeometry, createMaterial(0x303030));
+				tail2.scale.set(0.8, 0.8, 0.8);
+				tail2.position.set( 0.0, -16.0, -1.0);
+				ppoi.add(body, lEye, rEye, tail, tail2);
+				return ppoi;
+			}
+			function createLight() {
+				const light = new THREE.DirectionalLight(0xffffff, 0);
+				light.position.set(0, 0, 0);
+				return light;
+			}
+			function createAmbientLight() { return new THREE.AmbientLight(0x999999, 1.0); }
+			function getWidth() { return window.innerWidth-20; }
+			function getHeight() { return window.innerHeight-180; }
+			function createCamera() {
+				const camera = new THREE.PerspectiveCamera(75, getWidth() / getHeight(), 1, 1000);
+				camera.position.set(0, 20, 25);
+				camera.lookAt(new THREE.Vector3(0, 0, 0));
+				return camera;
+			}
+
+			const clock		= document.querySelector('#clock');
+			const past		= document.querySelector('#past');
+			const future	= document.querySelector('#future');
+			const bgm		= document.querySelector('#bgm');
+			const date = new Date();
+			function showTime(date) {
+				clock.textContent = date.getFullYear() + '年 ' + (date.getMonth()+1).toString().padStart(2, '0') + '月 ' + date.getDate().toString().padStart(2, '0') + '日';
+			}
+			function moveLight(theta) {
+				const x = Math.cos(Math.PI - Math.PI*2*theta);
+				const y = Math.sin(Math.PI - Math.PI*2*theta);
+				let z = 0;
+				if (theta < 0.25) {
+					z = 4*theta;			//  0 -  1
+				}
+				else if (theta < 0.75) {
+					z = 1-4*(theta-0.25);	//  1 - -1
+				}
+				else {
+					z = 4*(theta-0.75)-1;	// -1 -  0
+				}
+				light.position.set(1000*x, 1000*y, z*100);
+				light.intensity = 1*(z+1);
+				ambientLight.intensity = (z+1);
+			}
+			let target = 0;
+			let time = 0;
+			let grad = 1;
+			let delta = 1;
+			const duration = 800;
+			function animate() {
+				if (target != 0) {
+					delta += 0.05*grad;
+					if (grad ==  1 && Math.abs(target) < 365/2) { grad = -1; }
+					time += delta;
+					if (time > duration) {
+						date.setDate(date.getDate()+Math.sign(target));
+						time -= duration;
+						target -= Math.sign(target);
+						if (target == 0) {
+							past.removeAttribute('disabled');
+							future.removeAttribute('disabled');
+						}
+					}
+					showTime(date);
+					moveLight(((Math.sign(target)>0)?time:(duration-time))/duration);
+				}
+				renderer.render(scene, camera);
+				requestAnimationFrame(animate);
+			}
+			function main() {
+				renderer.setSize(getWidth(), getHeight());
+				renderer.setClearColor(0x000000);
+				document.body.appendChild(renderer.domElement);
+				scene.add(light);
+				ambientLight.intensity = 0.5;
+				scene.add(ambientLight);
+				object.rotation.set(Math.PI/2, Math.PI, 0);
+				scene.add(object);
+				renderer.render(scene, camera);
+				past.addEventListener('click', () => {
+					past.setAttribute('disabled', 'true');
+					future.setAttribute('disabled', 'true');
+					time = 0;
+					grad = 1;
+					target = -365;
+				});
+				future.addEventListener('click', () => {
+					past.setAttribute('disabled', 'true');
+					future.setAttribute('disabled', 'true');
+					time = 0;
+					grad = 1;
+					target =  365;
+				});
+				window.addEventListener('resize', () => {
+					renderer.setSize(getWidth(), getHeight());
+					camera.aspect = getWidth() / getHeight();
+					camera.updateProjectionMatrix();
+				});
+				showTime(date);
+				animate();
+			}
+			main();
+		</script>
+	</body>
+</html>

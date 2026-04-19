@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Ppoiの生態10</title>
+		<style>
+			h1 { font-size: 160%; color: black; text-shadow: 3px 3px 3px lightgray; line-height: 1.5; margin-bottom: 0; }
+			hr { height: 0; margin: 0; padding: 0; border: solid 1px gray; }
+			.group { border: dotted 1px gray; }
+		</style>
+	</head>
+	<body>
+		<h1>(番外編)Marverick<hr/></h1>
+		<table width="100%"><tr>
+			<td align="left" nowrap><span id="clock" style="font-size: 120%; font: bold; font-family: monospace;">--:--.-</span></td>
+			<td align="left" ><table><tr><th>カメラ</th><td nowrap><span id="radioButtons" class="group"></span></td></tr></table></td>
+			<td align="right"><a href="https://youtu.be/siwpn14IE7E" onclick="window.open('https://youtu.be/siwpn14IE7E', 'BGM', 'width=500,height=300,noopener'); return false;">BGM</a></td>
+		</tr></table>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/109/three.min.js"></script>
+		<script>
+			function inFrame() { return window != window.parent; }
+			function createRadioButtons(cameras) {
+				const radioButtons = document.querySelector('#radioButtons');
+				const setAttributes = (tag, attributes) => attributes.forEach((attribute) => tag.setAttribute(attribute[0], attribute[1]));
+				const buttons = [];
+				cameras.forEach((camera) => {
+					const input = document.createElement('input');
+					setAttributes(input, [['type', 'radio'], ['id', camera[0]], ['value', camera[0]], ['name', 'cameraType']]);
+					radioButtons.appendChild(input);
+					buttons.push(input);
+					const label = document.createElement('label');
+					label.setAttribute('for', camera[0]);
+					label.textContent = camera[1];
+					radioButtons.appendChild(label);
+				});
+				buttons[0].checked = true;
+				return buttons;
+			}
+			const buttons = createRadioButtons([
+				['birdLong',		'俯瞰(固定)'],	['birdShort',	'俯瞰(移動)'],	['birdFollow',	'俯瞰(追尾)'],
+				['firstForward',	'先頭->前方'],	['firstSecond',	'先頭->後続'],	['secondFirst',	'後続->先頭'],
+				['zeroFirst',		'前方->先頭'],	['thirdSecond',	'背後->後続']
+			]);
+			function getCameraId() {
+				for (let i = 0; i < buttons.length; ++i) {
+					if (buttons[i].checked) { return buttons[i].getAttribute('id'); }
+				}
+				return null;
+			}
+			function setCameraId(cameraId) {
+				for (let i = 0; i < buttons.length; ++i) {
+					if (buttons[i].getAttribute('id') == cameraId) { buttons[i].checked = true; }
+				}
+			}
+
+			function showClock(time) {
+				document.querySelector('#clock').textContent = (time<0)?'--:--.-':
+					Math.trunc(time/600).toString().padStart(2, '0') + ':' + Math.trunc((time%600)/10).toString().padStart(2, '0') + '.' + (time%10);
+			}
+			
+			const [WSEG, HSEG] = [64, 32];
+			const renderer = new THREE.WebGLRenderer();
+			const scene = new THREE.Scene();
+			const camera = new THREE.PerspectiveCamera(75, getWidth() / getHeight(), 0.01, 1000);
+			const materialMap = new Map();
+			function createMaterial(color) {
+				let material = materialMap.get(color);
+				if (material == null) {
+					material = new THREE.MeshStandardMaterial({color: color});
+					materialMap.set(color, material);
+				}
+				return material;
+			}
+			const sphereGeometry = new THREE.SphereGeometry(1, WSEG, HSEG);
+			const cylinderGeometry = new THREE.CylinderGeometry(1.2, 0.8, 10.0, WSEG, 1, false); 
+			function createPpoi() {
+				const ppoi = new THREE.Group();
+				const body  = new THREE.Mesh(sphereGeometry, createMaterial(0x9696c8));
+				body.scale.set(8, 10, 4); 
+				body.position.set ( 0.0,   0.0,  0.0);
+				const lEye  = new THREE.Mesh(sphereGeometry, createMaterial(0x646496));
+				lEye.rotation.set(-0.2, -0.3, 0);
+				lEye.scale.set(3.6, 4.5, 1.8);
+				lEye.position.set (-4.0,   4.0,  2.0);
+				const rEye  = new THREE.Mesh(sphereGeometry, createMaterial(0x646496));
+				rEye.rotation.set(-0.2, 0.3, 0);
+				rEye.scale.set(3.6, 4.5, 1.8); 
+				rEye.position.set ( 4.0,   4.0,  2.0);
+				const tail  = new THREE.Mesh(cylinderGeometry, createMaterial(0x303030));
+				tail.position.set ( 0.0, -11.0, -1.0);
+				const tail2 = new THREE.Mesh(sphereGeometry, createMaterial(0x303030));
+				tail2.scale.set(0.8, 0.8, 0.8);
+				tail2.position.set( 0.0, -16.0, -1.0);
+				ppoi.add(body, lEye, rEye, tail, tail2);
+				return ppoi;
+			}
+			function getWidth() { return window.innerWidth-20; }
+			function getHeight() { return inFrame()?getWidth()*2/3:window.innerHeight-110; }
+			
+			const PATH_X	= 'M   0,-70 C   0,-44   10,-45   10,-40 C   10,-35   -8,-30   -8,-25 C   -8,-20    8,-15    8,-10 C    8, -5   -6, 0   -6, 5 C -6,10  0,12  0,18'
+									+  ' C   0, 18    0, 35    0, 35 C    0, 35    0, 53    0, 53 C    0, 53    0, 71    0, 71 C    0, 71    0,90    0,90';
+			const PATH_Y	= 'M -70,-70 C -44,-44  -45,-45  -40,-40 C  -35,-35  -30,-30  -25,-25 C  -20,-20  -15,-15  -10,-10 C   -5, -5    0, 0    5, 5 C 10,10 12,12 18,18'
+									+  ' C  18, 18   35, 35   35, 35 C   35, 35   53, 53   53, 53 C   53, 53   71, 71   71, 71 C   71, 71   90,90   90,90';
+			const PATH_Z	= 'M   0,-70 C   0,-70    0,-40    0,-40 C    0,-40    0,-25    0,-25 C    0,-25    0,-10    0,-10 C    0,-10    0, 5    0, 5 C  0, 5  0,18  0,18'
+									+  ' C   0, 26   30, 29   30, 35 C   30, 39    5, 43    5, 53 C    5, 61   30, 64   30, 71 C   30, 71   30,90   30,90';
+			const PATH_RX	= 'M   0,-70 C   0,-70    0,-40    0,-40 C    0,-40    0,-25    0,-25 C    0,-25    0,-10    0,-10 C    0,-10    0, 5    0, 5 C  0, 5  0,18  0,18'
+									+  ' C  90, 18   90, 35    0, 35 C  -90, 35  -90, 53    0, 53 C   90, 53   90, 71    0, 71 C    0, 71    0,90    0,90';
+			const PATH_RY	= 'M   0,-70 C   0,-70  -90,-40  -90,-40 C  -90,-40   90,-25   90,-25 C   90,-25  -90,-10  -90,-10 C  -90,-10   90, 5   90, 5 C 90, 5  0,18  0,18'
+									+  ' C   0, 18 -180, 35 -180, 35 C -180, 35 -360, 53 -360, 53 C -360, 53 -360, 71 -360, 71 C -360, 71 -360,90 -360,90';
+			const PATH_RZ	= 'M   0,-70 C   0,-70    0,-40    0,-40 C    0,-40    0,-25    0,-25 C    0,-25    0,-10    0,-10 C    0,-10    0, 5    0, 5 C  0, 5  0,18  0,18'
+									+  ' C   0, 18    0, 35    0, 35 C    0, 35    0, 53    0, 53 C    0, 53    0, 71    0, 71 C    0, 71    0,90    0,90';
+
+			const BACK1		= PATH_X + ' L  30,90 L  30,-70 Z';
+			const BACK2		= PATH_X + ' L -30,90 L -30,-70 Z';
+			const BACK3		= 'M -30,90 L 30,90 L 30,45 L -30,45 L -30,90';
+			const PATH5		= 'M 0,25 L 4,24 L 8,21 L 11,18 L 13,13 L 14,10 L 16,5 L 18,3 L 20,4 L 23,10 L 25,18 L 27,25 L 28,28 L 29,29 L 34,34 L38,40';
+			const BACK5		= [[0,25], [4,24], [8,21], [11,18], [13,13], [14,10], [16,5], [18,3], [20,4], [23,10], [25,18], [27,25], [28,28], [29,29], [34,34], [38,40]];
+			
+			function pathToPoints(path) {
+				let elem = path.split(/(?:\s+)|(?:,\s*)/);
+				if (elem.length == 0) { throw new Error(); }
+				const points = [];
+				let index = 0;
+				let p0 = [0, 0];
+				while (index < elem.length) {
+					let token = elem[index++];
+					switch (token) {
+					case 'M':
+						if (index + 2 > elem.length) { throw new Error(); }
+						p0 = [Number(elem[index]), Number(elem[index+1])];
+						index += 2;
+						break;
+					case 'L':
+						if (index + 2 > elem.length) { throw new Error(); }
+						pTmp = [Number(elem[index]), Number(elem[index+1])];
+						points.push([p0, p0, pTmp, pTmp]);
+						p0 = pTmp;
+						index += 2;
+						break;
+					case 'Q':
+						if (index + 4 > elem.length) { throw new Error(); }
+						pTmp1 = [Number(elem[index]), Number(elem[index+1])];
+						pTmp2 = [Number(elem[index+2]), Number(elem[index+3])];
+						points.push([p0, [(p0[0] + 2*pTmp1[0])/3, (p0[1] + 2*pTmp1[1])/3], [(2*pTmp1[0] + pTmp2[0])/3, (2*pTmp1[1] + pTmp2[2])/3], pTmp2]);
+						p0 = pTmp2;
+						index += 4;
+						break;
+					case 'C':
+						if (index + 6 > elem.length) { throw new Error(); }
+						pTmp = [Number(elem[index+4]), Number(elem[index+5])];
+						points.push([p0, [Number(elem[index+0]), Number(elem[index+1])], [Number(elem[index+2]), Number(elem[index+3])], pTmp]);
+						p0 = pTmp;
+						index += 6;
+						break;
+					default:
+						console.log('ignore: ' + token);
+						break;
+					}
+				}
+				return points;
+			}
+			const X_Y  = pathToPoints(PATH_X);
+			const Y_Y  = pathToPoints(PATH_Y);
+			const Z_Y  = pathToPoints(PATH_Z);
+			const RX_Y = pathToPoints(PATH_RX);
+			const RY_Y = pathToPoints(PATH_RY);
+			const RZ_Y = pathToPoints(PATH_RZ);
+			
+			function createShape(path) {
+				let elem = path.split(/(?:\s+)|(?:,\s*)/);
+				if (elem.length == 0) { throw new Error(); }
+				const shape = new THREE.Shape();
+				let index = 0;
+				while (index < elem.length) {
+					let token = elem[index++];
+					switch (token) {
+					case 'M':
+						if (index + 2 > elem.length) { throw new Error(); }
+						shape.moveTo(Number(elem[index]), Number(elem[index+1]));
+						index += 2;
+						break;
+					case 'L':
+						if (index + 2 > elem.length) { throw new Error(); }
+						shape.lineTo(Number(elem[index]), Number(elem[index+1]));
+						index += 2;
+						break;
+					case 'Q':
+						if (index + 4 > elem.length) { throw new Error(); }
+						shape.quadraticCurveTo(Number(elem[index]), Number(elem[index+1]), Number(elem[index+2]), Number(elem[index+3]));
+						index += 4;
+						break;
+					case 'C':
+						if (index + 6 > elem.length) { throw new Error(); }
+						shape.bezierCurveTo(Number(elem[index]), Number(elem[index+1]), Number(elem[index+2]), Number(elem[index+3]), Number(elem[index+4]), Number(elem[index+5]));
+						index += 6;
+						break;
+					case 'Z':
+						shape.closePath();
+						break;
+					default:
+						console.log('ignore: ' + token);
+						break;
+					}
+				}
+				return shape;
+			}
+			function createBackground(scene) {
+				const material = new THREE.MeshStandardMaterial({ color: 0x005020, metalness: 0.3, roughness: 0.7 });
+				const extrudeSettings  = { curveSegments: 64, steps: 10, depth: 5, bevelEnabled: true, bevelThickness: 10, bevelSize: 2, bevelOffset: 1, bevelSegments: 5 };
+				const back1 = new THREE.Mesh(new THREE.ExtrudeGeometry(createShape(BACK1), extrudeSettings), material);
+				back1.position.set( 8, 0, -12);
+				scene.add(back1);
+				const back2 = new THREE.Mesh(new THREE.ExtrudeGeometry(createShape(BACK2), extrudeSettings), material);
+				back2.position.set(-8, 0, -12);
+				scene.add(back2);
+				const back3 = new THREE.Mesh(new THREE.ExtrudeGeometry(createShape(BACK3), extrudeSettings), material);
+				back3.position.set(0, 0, -12);
+				scene.add(back3);
+				const points = [];
+				BACK5.forEach((xy) => points.push(new THREE.Vector2(xy[0], xy[1])));
+				const back5 = new THREE.Mesh(new THREE.LatheGeometry(points, 32), material);
+				back5.rotation.set(Math.PI/2, 0, Math.PI);
+				back5.position.set(0, 53, 29);
+				scene.add(back5);
+			}
+			const ppoi1 = createPpoi();
+			ppoi1.scale.set(0.05, 0.05, 0.05);
+			ppoi1.position.set(0, -200, 0);
+			const ppoi2 = createPpoi();
+			ppoi2.scale.set(0.05, 0.05, 0.05);
+			ppoi2.position.set(0, -200, 0);
+			function getParameters(t1, t2) {
+				const bezier  = (p0, p1, p2, p3, t) => (1-t)**3*p0 + 3*t*(1-t)**2*p1 + 3*t**2*(1-t)*p2 + t**3*p3;
+				return [
+					bezier(X_Y[t1][0][0], X_Y[t1][1][0], X_Y[t1][2][0], X_Y[t1][3][0], t2),
+					bezier(Y_Y[t1][0][0], Y_Y[t1][1][0], Y_Y[t1][2][0], Y_Y[t1][3][0], t2),
+					bezier(Z_Y[t1][0][0], Z_Y[t1][1][0], Z_Y[t1][2][0], Z_Y[t1][3][0], t2),
+					
+					bezier(RX_Y[t1][0][0], RX_Y[t1][1][0], RX_Y[t1][2][0], RX_Y[t1][3][0], t2)/180*Math.PI,
+					bezier(RY_Y[t1][0][0], RY_Y[t1][1][0], RY_Y[t1][2][0], RY_Y[t1][3][0], t2)/180*Math.PI,
+					bezier(RZ_Y[t1][0][0], RZ_Y[t1][1][0], RZ_Y[t1][2][0], RZ_Y[t1][3][0], t2)/180*Math.PI
+				];
+			}
+
+			let time = 0;
+			const PREAMBLE = 50;
+			const POSTAMBLE = 80;
+			const DELAY = 30;
+			const DURATION = [250, 200, 180, 160, 160, 130, 110, 110, 80];
+			function sum(param) {
+				let sum = 0;
+				param.forEach((t) => sum += t)
+				return sum;
+			}
+			const TOTAL_TIME = sum(DURATION);
+
+			function movePpoi(ppoi, time) {
+				let [x, y, z, rx, ry, rz] = [0, -1000, 0, 0, 0, 0];
+				let t = time - PREAMBLE;
+				if (t >= 0) {
+					for (let index = 0; index < DURATION.length; ++index) {
+						if (t < DURATION[index]) { [x, y, z, rx, ry, rz] = getParameters(index, t/DURATION[index]); break; }
+						t -= DURATION[index];
+					}
+				}
+				ppoi.position.set(x,  y,  z);
+				ppoi.rotation.set(rx, ry, rz);
+			}
+			function animate() {
+				requestAnimationFrame(animate);
+				if (!inFrame()) { showClock((time > TOTAL_TIME - POSTAMBLE + DELAY)?TOTAL_TIME - POSTAMBLE + DELAY:time); }
+				if (++time > TOTAL_TIME + PREAMBLE + POSTAMBLE) { time = 0; }
+				movePpoi(ppoi1, time);
+				movePpoi(ppoi2, time - DELAY);
+				const [x1, y1, z1] = [ppoi1.position.x, ppoi1.position.y, ppoi1.position.z];
+				const [x2, y2, z2] = [ppoi2.position.x, ppoi2.position.y, ppoi2.position.z];
+				switch (getCameraId()) {
+					case 'birdLong':		camera.position.set(0,  10,     107);		camera.up = new THREE.Vector3(0, 1, 0);	camera.lookAt(0,  10,   0);		break;
+					case 'birdShort':		camera.position.set(0,  y1,     31);		camera.up = new THREE.Vector3(0, 1, 0);	camera.lookAt(0,  y1,   0);		break;
+					case 'birdFollow':		camera.position.set(x1, y1,     z1+5);		camera.up = new THREE.Vector3(0, 1, 0);	camera.lookAt(x1, y1,   z1);	break;
+					case 'firstForward':	camera.position.set(x1, y1+0.5, z1);		camera.up = new THREE.Vector3(0, 0, 1);	camera.lookAt(x1, y1+8, z1);	break;
+					case 'firstSecond':		camera.position.set(x1, y1-1.2, z1);		camera.up = new THREE.Vector3(0, 0, 1);	camera.lookAt(x2, y2,   z2);	break;
+					case 'secondFirst':		camera.position.set(x2, y2+0.7, z2);		camera.up = new THREE.Vector3(0, 0, 1);	camera.lookAt(x1, y1,   z1);	break;
+					case 'zeroFirst':		camera.position.set(x1, y1+2.1, z1+0.5);	camera.up = new THREE.Vector3(0, 0, 1);	camera.lookAt(x1, y1,   z1);	break;
+					case 'thirdSecond':		camera.position.set(x2, y2-2.1, z2+0.5);	camera.up = new THREE.Vector3(0, 0, 1);	camera.lookAt(x2, y2,   z2);	break;
+				}
+				renderer.render(scene, camera);
+			}
+			
+			function main() {
+				renderer.setSize(getWidth(), getHeight());
+				document.body.appendChild(renderer.domElement);
+				const light = new THREE.DirectionalLight(0xffffff, 2);
+				light.position.set(1, 1, 1);
+				scene.add(light);
+				scene.add(new THREE.AmbientLight(0x999999, 2.0));
+				createBackground(scene);
+				scene.add(ppoi1);
+				scene.add(ppoi2);
+				renderer.render(scene, camera);
+				window.addEventListener('resize', () => {
+					renderer.setSize(getWidth(), getHeight());
+					camera.aspect = getWidth() / getHeight();
+					camera.updateProjectionMatrix();
+				});
+				animate();
+			}
+			if (inFrame()) {
+				document.body.removeChild(document.querySelector('h1'));
+				document.body.removeChild(document.querySelector('table'));
+			}
+			setCameraId((new URL(window.location.href)).searchParams.get('camera'));
+			main();
+		</script>
+	</body>
+</html>

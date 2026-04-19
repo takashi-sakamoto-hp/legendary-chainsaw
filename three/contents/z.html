@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta name="Author" content="Sakamoto Takashi">
+		<title>Z</title>
+		<style>
+			#control { position: absolute; top: 0px; left: 0px; z-index: 1; }
+			#canvas	 { position: absolute; top: 0px; left: 0px; z-index: 0; }
+		</style>
+	</head>
+	<body>
+		<div id="control">
+			<button id="pilderOn">パイルダー・オン</button><button id="pilderOff">パイルダー・オフ</button>
+			<br>
+			<button id="punch">ロケット・パンチ</button><button id="breastFire">ブレスト・ファイア</button><button id="beam">光子力ビーム</button><button id="rust">ルスト・ハリケーン</button>
+			<br>
+			<button id="walk">歩く</button>
+		</div>
+		<div id="canvas" style="width: 100%; height: 100%;"></div>
+<!--
+		<div id="canvas" style="width: 200px; height: 160px;"></div>
+-->
+		<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+		<script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+		<script>
+			class Common {
+				#geometryMap = new Map();
+				#materialMap = new Map();
+				getGeometry(id) {
+					const ret = this.#geometryMap.get(id);
+					if (ret == null) { throw new Error('geometry not found: ' + id); }
+					return ret;
+				}
+				getMaterial(id) {
+					const ret = this.#materialMap.get(id);
+					if (ret == null) { throw new Error('geometry not found: ' + id); }
+					return ret;
+				}
+				createShape(path) {
+					let elem = path.match(/[A-Za-z]|-?\d+(\.\d+)?/g);
+					if (elem.length == 0) { throw new Error(); }
+					const shape = new THREE.Shape();
+					let index = 0;
+					while (index < elem.length) {
+						let token = elem[index++];
+						switch (token) {
+						case 'M':
+							if (index + 2 > elem.length) { throw new Error(); }
+							shape.moveTo(Number(elem[index]), Number(elem[index+1]));
+							index += 2;
+							break;
+						case 'L':
+							if (index + 2 > elem.length) { throw new Error(); }
+							shape.lineTo(Number(elem[index]), Number(elem[index+1]));
+							index += 2;
+							break;
+						case 'Q':
+							if (index + 4 > elem.length) { throw new Error(); }
+							shape.quadraticCurveTo(
+								Number(elem[index]),   Number(elem[index+1]),
+								Number(elem[index+2]), Number(elem[index+3]));
+							index += 4;
+							break;
+						case 'C':
+							if (index + 6 > elem.length) { throw new Error(); }
+							shape.bezierCurveTo(
+								Number(elem[index]),   Number(elem[index+1]),
+								Number(elem[index+2]), Number(elem[index+3]),
+								Number(elem[index+4]), Number(elem[index+5]));
+							index += 6;
+							break;
+						case 'Z':
+							shape.closePath();
+							break;
+						default:
+							console.log('ignore: ' + token);
+							break;
+						}
+					}
+					return shape;
+				}
+				createExtrudeGeometry(shape, options) { return new THREE.ExtrudeGeometry(this.createShape(shape), options); }
+				createBufferGeometry(positions, indices) {
+					const geometry = new THREE.BufferGeometry();
+					geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+					geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+					geometry.computeVertexNormals();
+					geometry.computeBoundingSphere();
+					return geometry;
+				}
+				createPolygonGeometry(pointXZs, height) {
+					const positions = [];
+					const indices = [];
+					if (height == 0) {
+						positions.push(0, 0, 0);
+						pointXZs.forEach(([x, z]) => { positions.push(x, 0, z); });
+						for (let i = 0; i < pointXZs.length; ++i) { indices.push(0, (i+0)%pointXZs.length+1, (i+1)%pointXZs.length+1); }
+					}
+					else {
+						positions.push(0, -height/2, 0);
+						pointXZs.forEach(([x, z]) => { positions.push(x, -height/2, z); });
+						positions.push(0,  height/2, 0);
+						pointXZs.forEach(([x, z]) => { positions.push(x,  height/2, z); });
+						for (let i = 0; i < pointXZs.length; ++i) {
+							indices.push(0,							(i+0)%pointXZs.length+1,					(i+1)%pointXZs.length+1);
+							indices.push(pointXZs.length+2,			(i+1)%pointXZs.length+pointXZs.length+2,	(i+0)%pointXZs.length+pointXZs.length+2);
+							indices.push((i+0)%pointXZs.length+1,	(i+0)%pointXZs.length+pointXZs.length+2,	(i+1)%pointXZs.length+pointXZs.length+2);
+							indices.push((i+0)%pointXZs.length+1,	(i+1)%pointXZs.length+pointXZs.length+2,	(i+1)%pointXZs.length+1);
+						}
+					}
+					return this.createBufferGeometry(positions, indices);
+				}
+				createCylinderGeometry(r1, r2, height, d, segment = 64, thetaStartOut = 0, thetaLengthOut = Math.PI*2, thetaStartIn = 0, thetaLengthIn = Math.PI*2) {
+					const thetaOut = thetaLengthOut/segment;
+					const thetaIn  = thetaLengthIn /segment;
+
+					// points
+					const outPoints = [];
+					const inPoints = [];
+					const [r1o, r1i, r2o, r2i] = [r1+d/2, r1-d/2, r2+d/2, r2-d/2];
+					for (let i = 0; i <= segment; ++i) {
+						const cosOut = Math.cos(thetaStartOut+thetaOut*i);
+						const sinOut = Math.sin(thetaStartOut+thetaOut*i);
+						const cosIn  = Math.cos(thetaStartIn +thetaIn *i);
+						const sinIn  = Math.sin(thetaStartIn +thetaIn *i);
+						outPoints.push(r1o*cosOut, height/2, r1o*sinOut, r2o*cosIn, -height/2, r2o*sinIn);		// outside
+						inPoints .push(r1i*cosOut, height/2, r1i*sinOut, r2i*cosIn, -height/2, r2i*sinIn);		// inside
+					}
+					const positions = [...outPoints, ...inPoints];
+					
+					const indices = [];
+					// surface
+					for (let i = 0; i < segment; ++i) {
+						const offset1 = i*2;
+						const offset2 = (segment+i+1)*2;
+						indices.push(offset1+2, offset1+3, offset1+1, offset1+2, offset1+1, offset1+0);		// outside
+						indices.push(offset2+2, offset2+1, offset2+3, offset2+2, offset2+0, offset2+1);		// inside
+						indices.push(offset1+2, offset2+0, offset2+2, offset1+2, offset1+0, offset2+0);		// top
+						indices.push(offset1+3, offset2+3, offset2+1, offset1+3, offset2+1, offset1+1);		// bottom
+					}
+					if (Math.min(thetaLengthOut, thetaLengthIn) < Math.PI*2-0.001) {
+						indices.push(0, 		segment*2+3,	segment*2+2,	0,			1,				segment*2+3);
+						indices.push(segment*2, segment*4+2, 	segment*4+3,	segment*2,	segment*4+3,	segment*2+1);
+					}
+					return this.createBufferGeometry(positions, indices);
+				}
+				constructor() {
+					this.#materialMap.set('MWhite',			new THREE.MeshStandardMaterial({color: 0xc0c0c0, metalness: 0.5, roughness: 0.5}));
+					this.#materialMap.set('MBlue',			new THREE.MeshStandardMaterial({color: 0x0a0a64, metalness: 0.7, roughness: 0.7}));
+					this.#materialMap.set('MBlack',			new THREE.MeshStandardMaterial({color: 0x101010, metalness: 0.7, roughness: 0.7}));
+					this.#materialMap.set('MRed',			new THREE.MeshStandardMaterial({color: 0xff0000, metalness: 0.7, roughness: 0.7}));
+					this.#materialMap.set('MRedDS',			new THREE.MeshStandardMaterial({color: 0xff0000, metalness: 0.7, roughness: 0.7, side: THREE.DoubleSide}));
+					this.#materialMap.set('MGlassRed',		new THREE.MeshStandardMaterial({color: 0xff0000, metalness: 0.7, roughness: 0.7, transparent: true, opacity: 0.5}));
+					this.#materialMap.set('MGold',			new THREE.MeshStandardMaterial({color: 0xffd700, metalness: 0.9, roughness: 0.5}));
+					this.#materialMap.set('MDarkGold',		new THREE.MeshStandardMaterial({color: 0x382800, metalness: 0.9, roughness: 0.5}));
+					this.#materialMap.set('MGlassGold',		new THREE.MeshStandardMaterial({color: 0xffd700, metalness: 0.9, roughness: 0.5, transparent: true, opacity: 0.7}));
+					this.#materialMap.set('MGlass',			new THREE.MeshStandardMaterial({color: 0xd0d0ff, metalness: 0.6, roughness: 0.3, transparent: true, opacity: 0.5}));
+					this.#materialMap.set('MDarkBlue',		new THREE.MeshStandardMaterial({color: 0x040430, metalness: 0.7, roughness: 0.7}));
+					
+					this.#geometryMap.set('Box',			new THREE.BoxGeometry(1, 1, 1));
+					this.#geometryMap.set('Sphere',			new THREE.SphereGeometry(1, 64, 32));
+					this.#geometryMap.set('HalfSphere',		new THREE.SphereGeometry(1, 64, 32, 0, Math.PI+0.001));
+					this.#geometryMap.set('QuarterSphere',	new THREE.SphereGeometry(1, 64, 32, 0, Math.PI+0.001, 0, Math.PI/2+0.001));
+					this.#geometryMap.set('Cylinder',		new THREE.CylinderGeometry(1, 1, 1, 32, 1, false));
+					this.#geometryMap.set('Torus',			new THREE.TorusGeometry(1.04, 0.2, 32, 128));
+					this.#geometryMap.set('Cone',			new THREE.ConeGeometry(1, 1, 64));
+					this.#geometryMap.set('Capsule',		new THREE.CapsuleGeometry(1, 2, 32, 64)); 
+				}
+			}
+			
+			class HoverPilder extends Common {
+				#object = null;
+				#camera = null;
+				#state = null;	// opening, opened, closing, closed
+				#inAnimation = false;
+				#leftBlades = null;
+				#rightBlades = null;
+				#leftWing = null;
+				#rightWing = null;
+				#geometryMap = new Map();
+				#materialMap = new Map();
+				getGeometry(id) { return this.#geometryMap.get(id)??super.getGeometry(id); }
+				getMaterial(id) { return this.#materialMap.get(id)??super.getMaterial(id); }
+				#createJet(material) {
+					const m1 = new THREE.Mesh(this.getGeometry('Cylinder'),	material);
+					m1.scale.set(5, 30, 5);											m1.position.set(0,  6, 0);
+					const m2 = new THREE.Mesh(this.getGeometry('Sphere'),	material);
+					m2.scale.set(5,  5, 15);	m2.rotation.set(-Math.PI/2, 0, 0);	m2.position.set(0, 18, 0);
+
+					const jet = new THREE.Group();
+					jet.add(m1, m2);			jet.rotation.set(-Math.PI/2, 0, 0);
+					return jet;
+				}
+				#createBase() {
+					const m1 = new THREE.Mesh(super.createExtrudeGeometry('M-25,15 L0,20 L25,15 L25,-2 L-25,-2 Z', {steps: 1, depth: 2, bevelEnabled: false}), this.getMaterial('MRed')); 
+														m1.rotation.set(-Math.PI/2, 0, 0);	m1.position.set(0, 4, 0);
+					const m2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MRed'));
+					m2.scale.set(2, 18, 2);				m2.rotation.set(-Math.PI/2, 0, 0);	m2.position.set(-25, 5, -6.5);
+					const m3 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MRed'));
+					m3.scale.set(2, 18, 2);				m3.rotation.set(-Math.PI/2, 0, 0);	m3.position.set( 25, 5, -6.5);
+					const m4 = this.#createJet(this.getMaterial('MBlack'));					m4.position.set(-13, 11.5, 2);
+					const m5 = this.#createJet(this.getMaterial('MBlack'));					m5.position.set( 13, 11.5, 2);
+					
+					const base = new THREE.Group();
+					base.add(m1, m2, m3, m4, m5);
+					return base;
+				}
+				#createBody() {
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(23, 5, 32, 64), this.getMaterial('MRed'));
+													m1.rotation.set(-Math.PI/2, 0, 0);	m1.position.set(0, 4, -2);
+					const m2 = new THREE.Mesh(new THREE.CylinderGeometry(23, 23, 8, 64), this.getMaterial('MRed'));
+													m2.rotation.set(-Math.PI/2, 0, 0);	m2.position.set(0, 4, -22);
+					const m3 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MGlass'));
+					m3.scale.set(22, 22, 22*1.2);										m3.position.set(0, 4, -25);
+					const m4 = new THREE.Mesh(this.getGeometry('QuarterSphere'), this.getMaterial('MRedDS'));
+					m4.scale.set(23, 23, 23*1.2);	m4.rotation.set(Math.PI, 0, 0);		m4.position.set(0, 4, -25);
+					const m5 = new THREE.Mesh(super.createExtrudeGeometry('M-5,0 L11,20 L52,24 Q19,13 27,0 Z', {steps: 1, depth: 2, bevelEnabled: false}), this.getMaterial('MRed')); 
+													m5.rotation.set(0, -Math.PI/2, 0);	m5.position.set(0, 8, -13);
+					const m6 = new THREE.Mesh(super.createExtrudeGeometry('M-15,-5 L15,-5 C4,-5 4,5 10,7 L-10,7 C-4,5 -4,-5 -15,-5 Z', {steps: 1, depth: 20, bevelEnabled: false}), this.getMaterial('MRed')); 
+					m6.scale.set(1.0, 1.0, 0.7);										m6.position.set(0, -22, -26);
+					
+					const body = new THREE.Group();
+					body.add(m1, m2, m3, m4, m5, m6);
+					return body;
+				}
+				#createLeftBlades() {
+					const m1 = new THREE.Mesh(super.createCylinderGeometry(20, 20, 3, 0.8), this.getMaterial('MBlack'));
+					const m2 = new THREE.Mesh(this.getGeometry('Capsule'), this.getMaterial('MBlack'));
+					m2.scale.set(3, 1.5, 3);
+					const m3 = new THREE.Mesh(this.getGeometry('Box'), this.getMaterial('MWhite'));
+					m3.scale.set(16, 4, 0.1);	m3.rotation.set(Math.PI*0.4, 0, 0);		m3.position.set(-10, 0, 0);
+					const m4 = new THREE.Mesh(this.getGeometry('Box'), this.getMaterial('MWhite'));
+					m4.scale.set(16, 4, 0.1);	m4.rotation.set(-Math.PI*0.4, 0, 0);	m4.position.set( 10, 0, 0);
+					const m5 = new THREE.Mesh(this.getGeometry('Box'), this.getMaterial('MWhite'));
+					m5.scale.set(0.1, 4, 16);	m5.rotation.set(0, 0, -Math.PI*0.4);	m5.position.set(0, 0, 10);
+					const m6 = new THREE.Mesh(this.getGeometry('Box'), this.getMaterial('MWhite'));
+					m6.scale.set(0.1, 4, 16);	m6.rotation.set(0, 0, Math.PI*0.4);		m6.position.set(0, 0, -10);
+					const leftBlades = new THREE.Group();
+					leftBlades.add(m1, m2, m3, m4, m5, m6);
+					return leftBlades;
+				}
+				#createRightBlades() {
+					const m1 = new THREE.Mesh(super.createCylinderGeometry(20, 20, 3, 0.8), this.getMaterial('MBlack'));
+					const m2 = new THREE.Mesh(this.getGeometry('Capsule'), this.getMaterial('MBlack'));
+					m2.scale.set(3, 1.5, 3);
+					const m3 = new THREE.Mesh(this.getGeometry('Box'), this.getMaterial('MWhite'));
+					m3.scale.set(16, 4, 0.1);	m3.rotation.set(-Math.PI*0.4, 0, 0);	m3.position.set(-10, 0, 0);
+					const m4 = new THREE.Mesh(this.getGeometry('Box'), this.getMaterial('MWhite'));
+					m4.scale.set(16, 4, 0.1);	m4.rotation.set( Math.PI*0.4, 0, 0);	m4.position.set( 10, 0, 0);
+					const m5 = new THREE.Mesh(this.getGeometry('Box'), this.getMaterial('MWhite'));
+					m5.scale.set(0.1, 4, 16);	m5.rotation.set(0, 0, Math.PI*0.4);		m5.position.set(0, 0, 10);
+					const m6 = new THREE.Mesh(this.getGeometry('Box'), this.getMaterial('MWhite'));
+					m6.scale.set(0.1, 4, 16);	m6.rotation.set(0, 0, -Math.PI*0.4);	m6.position.set(0, 0, -10);
+					const leftBlades = new THREE.Group();
+					leftBlades.add(m1, m2, m3, m4, m5, m6);
+					return leftBlades;
+				}
+				#createLeftWing() {
+					const leftWing = new THREE.Group();
+					const m1 = new THREE.Mesh(super.createExtrudeGeometry('M0,3 L33,15 L33,-2 L0,-2', {steps: 1, depth: 2, bevelEnabled: false}), this.getMaterial('MRed'));
+					m1.scale.set(1, 1, 1);	m1.rotation.set(-Math.PI/2, 0, 0);	m1.position.set(-33, 0, 0);
+					this.#leftBlades = this.#createLeftBlades();				this.#leftBlades.position.set(-30, -2, 0);
+					leftWing.add(m1, this.#leftBlades);
+					return leftWing;
+				}
+				#createRightWing() {
+					const rightWing = new THREE.Group();
+					const m1 = new THREE.Mesh(super.createExtrudeGeometry('M0,3 L-33,15, L-33,-2 L0,-2', {steps: 1, depth: 2, bevelEnabled: false}), this.getMaterial('MRed'));
+					m1.scale.set(1, 1, 1);	m1.rotation.set(-Math.PI/2, 0, 0);	m1.position.set( 33, 0, 0);
+					this.#rightBlades = this.#createRightBlades();				this.#rightBlades.position.set( 30, -2, 0);
+					rightWing.add(m1, this.#rightBlades);
+					return rightWing;
+				}
+				constructor() {
+					super();
+					const base = this.#createBase();
+					base.scale.set(0.1, 0.1, 0.1);		base.rotation.set(0, Math.PI, 0);		base.position.set(0, -3.3, 1.2);
+					const body = this.#createBody();
+					body.scale.set(0.1, 0.1, 0.1);		body.rotation.set(0, Math.PI, 0);
+					this.#leftWing = this.#createLeftWing();
+					this.#rightWing = this.#createRightWing();
+					this.#leftWing.scale.set(0.1, 0.1, 0.1);									this.#leftWing.position.set(-2.6,-2.92,2.5);
+					this.#rightWing.scale.set(0.1, 0.1, 0.1);									this.#rightWing.position.set( 2.6,-2.92,2.5);
+					this.#object = new THREE.Group();
+					this.#camera = new THREE.PerspectiveCamera(60, getWidth()/getHeight(), 0.1, 1000);
+					const rig = new THREE.Group();
+					rig.add(this.#camera);
+					rig.rotation.set(0, Math.PI, 0);											rig.position.set(0, 0.8, 2);
+					this.#object.add(base, body, this.#leftWing, this.#rightWing, rig);
+					this.setState("opened");
+
+				}
+				setState(state = "opened") {
+					if (this.#state == state) { return; }
+					this.#state = state;
+					switch (state) {
+					case "opening":
+						this.#inAnimation = true;
+						break;
+					case "opened":	
+						this.#leftWing.rotation.z  = 0;
+						this.#rightWing.rotation.z = 0;
+						this.#inAnimation = false;
+						break;
+					case "closing":
+						this.#inAnimation = true;
+						break;
+					case "closed":
+						this.#leftWing.rotation.z  = -Math.PI/2;
+						this.#rightWing.rotation.z =  Math.PI/2;
+						this.#inAnimation = false;
+						break;
+					}
+				}
+				#bladeRotationMax = 0.3;
+				#bladeRotationDelta = 0;
+				animate() {
+					this.#leftBlades.rotation.y  += this.#bladeRotationDelta;
+					this.#rightBlades.rotation.y -= this.#bladeRotationDelta;
+					switch (this.#state) {
+					case "opened":
+						this.#bladeRotationDelta = this.#bladeRotationMax = 0.3;
+						this.#leftWing.rotation.z = 0;
+						this.#rightWing.rotation.z = 0;
+						return false;
+					case "closed":
+						this.#bladeRotationDelta = 0;
+						this.#leftWing.rotation.z = -Math.PI/2;
+						this.#rightWing.rotation.z = Math.PI/2;
+						return false;
+					case "opening":
+						this.#leftWing.rotation.z  = Math.min(this.#leftWing.rotation.z+0.01, 0);
+						this.#rightWing.rotation.z = Math.max(this.#rightWing.rotation.z-0.01, 0);
+						if (this.#leftWing.rotation.z == 0) {
+							this.#bladeRotationDelta = 0.005;
+							this.setState("opening2");
+						}
+						return true;
+					case "opening2":
+						this.#bladeRotationDelta = Math.min(this.#bladeRotationDelta+0.005, this.#bladeRotationMax);
+						if (this.#bladeRotationDelta == this.#bladeRotationMax) { this.setState("opened"); }
+						return true;
+					case "closing":
+						this.#bladeRotationDelta = Math.max(this.#bladeRotationDelta-0.005, 0);
+						if (this.#bladeRotationDelta == 0) { this.setState("closing2"); }
+						return true;
+					case "closing2":
+						this.#leftWing.rotation.z  = Math.max(this.#leftWing.rotation.z-0.01, -Math.PI/2);
+						this.#rightWing.rotation.z = Math.min(this.#rightWing.rotation.z+0.01,  Math.PI/2);
+						if (this.#leftWing.rotation.z == -Math.PI/2) { this.setState("closed"); }
+						return true;
+					}
+					return true;
+				}
+				getObject() { return this.#object; }
+				getCamera() { return this.#camera; }
+			}
+
+			class RustBeam {
+				#radiusTop;
+				#radiusBottom;
+				#height;
+				#delta = 0.001;
+				#particles = [];
+				#object = null;
+				#geometry = null;
+				#material = null;
+				#time = 0;
+				#state = null;
+				getGeometry(rot = 0) {
+					if (this.#geometry != null) { this.#geometry.dispose(); }
+					const pos = [];
+					if (this.#state != 'STOP') {
+						for (let i = 0; i < this.#particles.length; ++i) {
+							let [rand1, rand2, rand3] = this.#particles[i];
+							const radius = (this.#radiusBottom - (this.#radiusBottom - this.#radiusTop)*rand1)*rand2;
+							const theta = rand3*Math.PI*2;
+							pos.push(radius*Math.sin(theta+rot), (rand1-0.5)*this.#height, radius*Math.cos(theta+rot));
+						}
+					}
+					this.#geometry = new THREE.BufferGeometry();
+					this.#geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+					return this.#geometry;
+				}
+				constructor(radiusTop = 1, radiusBottom = 1, height = 1, color = 0xff0000) {
+					this.#radiusTop		= radiusTop;
+					this.#radiusBottom	= radiusBottom;
+					this.#height		= height;
+					this.#particles		= [];
+					this.#geometry		= this.getGeometry(0);
+					this.#material		= new THREE.PointsMaterial({size: 0.03, color: color});
+					for (let i = 0; i < 3000; ++i) { this.#particles.push([Math.random(), Math.random(), Math.random()]); }
+					this.#object = new THREE.Points(this.#geometry, this.#material);
+				}
+				animate() {
+					for (let i = 0; i < this.#particles.length; ++i) {
+						let y = this.#particles[i][0]-this.#delta;
+						this.#particles[i][0] = (y < 0)?y+1:y;
+					}
+					++this.#time;
+					this.#object.geometry = this.getGeometry(this.#time/15);
+				}
+				setState(state) { this.#state = state; this.animate(); }
+				getObject() { return this.#object; }
+				dispose() {
+					if (this.#geometry != null) { this.#geometry.dispose(); }
+					this.#material.dispose();
+				}
+			}
+
+			class Z extends Common {
+				#object = null;
+				#state = null;	// pilderOff, pilderOn
+				
+				#rightEye = null;
+				#leftEye = null;
+				
+				#head = null;
+				#body = null;
+				
+				#rightForearm = null;
+				#rightArm = null;
+				#leftForearm = null;
+				#leftArm = null;
+				
+				#leftAnkle = null;
+				#rightLeg = null;
+				#rightFoot = null;
+				#rightAnkle = null;
+				#leftLeg = null;
+				#leftFoot = null;
+				
+				#fire = [];
+				#beam = null;
+				#rust = null;
+				
+				#pilder = null;
+				
+				#inAnimation = false;
+				#animationStep = 0;
+				#wait;
+				
+				#COVER_THICK	= 0.2;
+				#BODY_WIDTH		= 2.0;
+				#BODY_HEIGHT	= 4.5;
+				#BODY_DEPTH		= 2.0;
+				#ARM_HEIGHT		= 5;
+				#ARM_THICK		= 1.3;
+				#FOOT_HEIGHT	= 8.0;
+				#FOOT_THICK		= 1.6;
+				#geometryMap = new Map();
+				#materialMap = new Map();
+				getGeometry(id) { return this.#geometryMap.get(id)??super.getGeometry(id); }
+				getMaterial(id) { return this.#materialMap.get(id)??super.getMaterial(id); }
+
+				#createMask(material) {
+					const geometry = this.getGeometry('Box');
+					const mask1 = new THREE.Group();
+					const m11 = new THREE.Mesh(geometry, material);	m11.rotation.set(0, 0,  0.15);	m11.scale.set(0.15, 1, 0.1);	m11.position.set(-0.45, 0, 0);
+					const m12 = new THREE.Mesh(geometry, material);	m12.rotation.set(0, 0,  0.05);	m12.scale.set(0.15, 1, 0.1);	m12.position.set(-0.15, 0, 0);
+					const m13 = new THREE.Mesh(geometry, material);	m13.rotation.set(0, 0, -0.05);	m13.scale.set(0.15, 1, 0.1);	m13.position.set( 0.15, 0, 0);
+					const m14 = new THREE.Mesh(geometry, material);	m14.rotation.set(0, 0, -0.15);	m14.scale.set(0.15, 1, 0.1);	m14.position.set( 0.45, 0, 0);
+					const m15 = new THREE.Mesh(geometry, material);									m15.scale.set(1.05, 0.15, 0.1);	m15.position.set( 0, 0.42, 0);
+					const m16 = new THREE.Mesh(geometry, material);									m16.scale.set(0.90, 0.15, 0.1);	m16.position.set( 0,-0.42, 0);
+					mask1.add(m11, m12, m13, m14, m15, m16);
+
+					const mask2 = new THREE.Group();
+					const m21 = new THREE.Mesh(geometry, material);	m21.scale.set(0.15, 0.8, 0.1);	m21.rotation.set(0, 0,  Math.PI*0.05);	m21.position.set(-0.37, 0.1, 0);
+					const m22 = new THREE.Mesh(geometry, material);	m22.scale.set(0.15, 0.6, 0.1);	m22.rotation.set(0, 0,  Math.PI*0.05);	m22.position.set(-0.74, 0.2, 0);
+					const m23 = new THREE.Mesh(geometry, material);	m23.scale.set(0.15, 0.4, 0.1);	m23.rotation.set(0, 0,  Math.PI*0.05);	m23.position.set(-1.11, 0.3, 0);
+					const m24 = new THREE.Mesh(geometry, material);	m24.scale.set(1.24, 0.15, 0.1);	m24.rotation.set(0, 0, -Math.PI*0.02);	m24.position.set(-0.73,  0.46, 0);
+					const m25 = new THREE.Mesh(geometry, material);	m25.scale.set(1.43, 0.15, 0.1);	m25.rotation.set(0, 0, -Math.PI*0.13);	m25.position.set(-0.59, -0.12, 0);
+					mask2.add(m21, m22, m23, m24, m25);
+					mask2.position.set(-0.45, 0, 0);	mask2.rotation.set(0.3, -1.05, 0.15);
+					
+					const mask3 = new THREE.Group();
+					const m31 = new THREE.Mesh(geometry, material);	m31.scale.set(0.15, 0.8, 0.1);	m31.rotation.set(0, 0, -Math.PI*0.05);	m31.position.set( 0.37, 0.1, 0);
+					const m32 = new THREE.Mesh(geometry, material);	m32.scale.set(0.15, 0.6, 0.1);	m32.rotation.set(0, 0, -Math.PI*0.05);	m32.position.set( 0.74, 0.2, 0);
+					const m33 = new THREE.Mesh(geometry, material);	m33.scale.set(0.15, 0.4, 0.1);	m33.rotation.set(0, 0, -Math.PI*0.05);	m33.position.set( 1.11, 0.3, 0);
+					const m34 = new THREE.Mesh(geometry, material);	m34.scale.set(1.24, 0.15, 0.1);	m34.rotation.set(0, 0,  Math.PI*0.02);	m34.position.set( 0.73,  0.46, 0);
+					const m35 = new THREE.Mesh(geometry, material);	m35.scale.set(1.43, 0.15, 0.1);	m35.rotation.set(0, 0,  Math.PI*0.13);	m35.position.set( 0.59, -0.12, 0);
+					mask3.add(m31, m32, m33, m34, m35);
+					mask3.position.set(0.45, 0, 0);	mask3.rotation.set( 0.3,  1.05, -0.15);
+
+					const mask = new THREE.Group();
+					mask.add(mask1, mask2, mask3);
+					return mask;
+				}
+				#createFace0Geometry() { return super.createPolygonGeometry([[-0.8, 1.0], [0.8, 1.0], [1.3, 0.5], [1.3, -0.5], [0.8, -1.0], [-0.8, -1.0], [-1.3, -0.5], [-1.3, 0.5]], 0); }
+				#createFace1Geometry() {
+					return super.createPolygonGeometry([[-0.8, 1.0], [0.8, 1.0], [1.3, 0.5], [1.3, -0.5], [0.8, -1.0], [-0.8, -1.0], [-1.3, -0.5], [-1.3, 0.5]].reverse(), 0.9);
+				}
+				#createFace2Geometry() { 
+					const [p00, p01] = [[-1.0,  1.5,  1.0], [-0.4,  -1.0,  0.4 ]];
+					const [p02, p03] = [[ 1.0,  1.5,  1.0], [ 0.4,  -1.0,  0.4 ]];
+					const [p04, p05] = [[ 1.3,  1.5,  0.5], [ 0.5,  -1.0,  0.2 ]];
+					const [p06, p07] = [[ 1.3,  1.5, -0.5], [ 0.5,  -1.0, -0.2 ]];
+					const [p08, p09] = [[ 1.0,  1.5, -1.0], [ 0.4,  -1.0, -0.4 ]];
+					const [p10, p11] = [[-1.0,  1.5, -1.0], [-0.4,  -1.0, -0.4 ]];
+					const [p12, p13] = [[-1.3,  1.5, -0.5], [-0.4,  -1.0, -0.2 ]];
+					const [p14, p15] = [[-1.3,  1.5,  0.5], [-0.5,  -1.0,  0.2 ]];
+					const positions = [...p00, ...p01, ...p02, ...p03, ...p04, ...p05, ...p06, ...p07, ...p08, ...p09, ...p10, ...p11, ...p12, ...p13, ...p14, ...p15];
+					const indices = [
+						 0, 1, 2,	 2, 1, 3,
+						 2, 3, 4,	 4, 3, 5,
+						 4, 5, 6,	 6, 5, 7,
+						 6, 7, 8,	 8, 7, 9,
+						 8, 9,10,	10, 9,11,
+						10,11,12,	12,11,13,
+						12,13,14,	14,13,15,
+						14,15, 0,	 0,15, 1,
+					];
+					return super.createBufferGeometry(positions, indices);
+				}
+				#createFace3Geometry() { return super.createPolygonGeometry([[-2,9],[-3,-1],[3,-1]], 3); }
+				#createFace(material) {
+					const m0 = new THREE.Mesh(this.#createFace0Geometry(), this.getMaterial('MWhite'));	m0.scale.set(1, 1, 1);		m0.position.set(0, 1.5, 0);
+					const m1 = new THREE.Mesh(this.#createFace1Geometry(), material);	m1.scale.set(1, 1, 1);		m1.position.set(0, 1.0, 0);
+					const m2 = new THREE.Mesh(this.#createFace2Geometry(), material);	m2.scale.set(1, 1, 1);	m2.position.set(0, -0.7, 0);
+					const m3 = new THREE.Mesh(this.#createFace3Geometry(), material);
+					m3.rotation.set(-Math.PI/2, 0, -Math.PI/2); m3.scale.set(0.1, 0.13, 0.1);	m3.position.set(0, 0.4, 1.2);
+					const face = new THREE.Group();
+					face.add(m0, m1, m2, m3);
+					return face;
+				}
+				#createEar() {
+					const ear = new THREE.Group();
+					const m1 = new THREE.Mesh(this.getGeometry('Cone'), this.getMaterial('MGold'));
+					m1.scale.set(0.1, 1.2, 0.1);	m1.position.set(0, 0.6, 0);
+					const m2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MWhite'));
+					m2.scale.set(0.2, 0.1, 0.2);
+					ear.add(m1, m2);
+					return ear;
+				}
+				#createHead() {
+					const m1 = this.#createFace(this.getMaterial('MDarkBlue'));
+					m1.scale.set(0.40, 0.44, 0.52);																	m1.position.set(0, 0.4, 0);
+					const m2 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MDarkBlue'));
+					m2.scale.set(0.4, 0.4, 0.4);
+					const h1 = new THREE.Mesh(this.getGeometry('Head1'), this.getMaterial('MWhite'));				h1.position.set(0, 1.5, 0);
+					const h2 = new THREE.Mesh(this.getGeometry('Head1'), this.getMaterial('MWhite'));
+																h2.rotation.set(0, Math.PI, 0);						h2.position.set(0, 1.5, 0);
+					const h3 = new THREE.Mesh(this.getGeometry('Head2'), this.getMaterial('MWhite'));				h3.position.set(0, 1.1, 0);
+					const i1 = this.#createMask(this.getMaterial('MWhite'));
+					i1.scale.set(0.51, 0.48, 0.51);				i1.rotation.set(0.3, 0, 0);							i1.position.set(0, 0.3, 0.6);
+					
+					const e1 = this.#createEar();				e1.rotation.set(0, 0, -Math.PI/2);					e1.position.set( 0.56, 0.69, 0);
+					const e2 = this.#createEar();				e2.rotation.set(0, 0,  Math.PI/2);					e2.position.set(-0.56, 0.69, 0);
+					this.#rightEye = new THREE.Mesh(this.getGeometry('RightEye'), this.getMaterial('MGold'));
+					this.#rightEye.scale.set(0.07, 0.04, 0.07);	this.#rightEye.rotation.set(-Math.PI/2, 0, 0);		this.#rightEye.position.set( 0.14, 0.74, 0.55);
+					this.#leftEye = new THREE.Mesh(this.getGeometry('RightEye'), this.getMaterial('MGold'));
+					this.#leftEye.scale.set(0.07, 0.04, 0.07);	this.#leftEye.rotation.set( Math.PI/2, Math.PI, 0);	this.#leftEye .position.set(-0.14, 0.74, 0.55);
+					const head = new THREE.Group();
+					head.add(m1, m2, h1, h2, h3, i1, e1, e2, this.#rightEye, this.#leftEye);
+					
+					const beam1 = new THREE.Mesh(this.getGeometry('RightEye'), this.getMaterial('MGlassGold'));
+					beam1.scale.set(0.07, 0.1, 0.07);			beam1.rotation.set(-Math.PI/2, 0, 0);				beam1.position.set( 0.14, 0, 0.01);
+					const beam2 = new THREE.Mesh(this.getGeometry('RightEye'), this.getMaterial('MGlassGold'));
+					beam2.scale.set(0.07, 0.1, 0.07);			beam2.rotation.set( Math.PI/2, Math.PI, 0);			beam2.position.set(-0.14, 0, 0.01);
+					this.#beam = new THREE.Group();
+					this.#beam.add(beam1, beam2);
+					this.#beam.rotation.set(0.38, 0, 0);
+					this.#beam.position.set(0, 0.74, 0.5);
+					head.add(this.#beam);
+
+					this.#rust = new RustBeam(0.2, 1.5, 20, 0xeeeeee);
+					const grp = new THREE.Group();
+					const obj = this.#rust.getObject();			obj.position.set(0, -10, 0);
+					grp.add(obj);								grp.rotation.set(-Math.PI/2+0.4, 0, 0);				grp.position.set(0, 0.28, 0.7);
+					head.add(grp);
+					return head;
+				}
+
+				#createBody() {
+					const m0 = new THREE.Mesh(this.getGeometry('Neck'), this.getMaterial('MWhite'));
+																												m0.position.set(0, this.#BODY_HEIGHT/2+1.2, 0);
+					const scale1 = this.#BODY_DEPTH/2;
+					const scale2 = scale1+this.#COVER_THICK;
+					const m1 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m1.scale.set(scale1, scale1, scale1);														m1.position.set(-this.#BODY_WIDTH/2, this.#BODY_HEIGHT/2, 0);
+					const m2 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m2.scale.set(scale1, scale1, scale1);														m2.position.set( this.#BODY_WIDTH/2, this.#BODY_HEIGHT/2, 0);
+					const m3 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m3.scale.set(scale1, scale1, scale1);														m3.position.set(-this.#BODY_WIDTH/2, -this.#BODY_HEIGHT/2, 0);
+					const m4 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m4.scale.set(scale1, scale1, scale1);														m4.position.set(this.#BODY_WIDTH/2, -this.#BODY_HEIGHT/2, 0);
+					const m5 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MWhite'));
+					m5.scale.set(scale1, this.#BODY_HEIGHT, scale1);											m5.position.set(-this.#BODY_WIDTH/2, 0, 0);
+					const m6 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MWhite'));
+					m6.scale.set(scale1, this.#BODY_HEIGHT, scale1);											m6.position.set( this.#BODY_WIDTH/2, 0, 0);
+					const m7 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MWhite'));
+					m7.scale.set(scale1, this.#BODY_WIDTH, scale1);		m7.rotation.set(0, 0, Math.PI/2);		m7.position.set(0, this.#BODY_HEIGHT/2, 0);
+					const m8 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MWhite'));
+					m8.scale.set(scale1, this.#BODY_WIDTH, scale1);		m8.rotation.set(0, 0, -Math.PI/2);		m8.position.set( 0, -this.#BODY_HEIGHT/2, 0);
+					const m9 = new THREE.Mesh(this.getGeometry('Box'), this.getMaterial('MWhite'));		
+					m9.scale.set(this.#BODY_WIDTH, this.#BODY_HEIGHT, this.#BODY_DEPTH);						m9.position.set(0, 0, 0);
+					
+					const UP_COVER_HEIGHT = this.#BODY_HEIGHT*0.35;
+					const n1 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MBlack'));
+					n1.scale.set(scale2, scale2, scale2);														n1.position.set(-this.#BODY_WIDTH/2, this.#BODY_HEIGHT/2, 0);
+					const n2 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MBlack'));
+					n2.scale.set(scale2, scale2, scale2);														n2.position.set( this.#BODY_WIDTH/2, this.#BODY_HEIGHT/2, 0);
+					const n3 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlack'));
+					n3.scale.set(scale2, this.#BODY_WIDTH, scale2);		n3.rotation.set(0, 0, Math.PI/2);		n3.position.set(0, this.#BODY_HEIGHT/2, 0);
+					const n4 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlack'));
+					n4.scale.set(scale2, UP_COVER_HEIGHT, scale2);												n4.position.set(-this.#BODY_WIDTH/2, (this.#BODY_HEIGHT-UP_COVER_HEIGHT)/2, 0);
+					const n5 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlack'));
+					n5.scale.set(scale2, UP_COVER_HEIGHT, scale2);												n5.position.set( this.#BODY_WIDTH/2, (this.#BODY_HEIGHT-UP_COVER_HEIGHT)/2, 0);
+					const n6 = new THREE.Mesh(this.getGeometry('Box'), this.getMaterial('MBlack'));		
+					n6.scale.set(this.#BODY_WIDTH, UP_COVER_HEIGHT, this.#BODY_DEPTH+this.#COVER_THICK*2);		n6.position.set(0, (this.#BODY_HEIGHT-UP_COVER_HEIGHT)/2, 0);
+					
+					const DOWN_COVER_HEIGHT = this.#BODY_HEIGHT*0.23;
+					const o1 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MBlack'));
+					o1.scale.set(scale2, scale2, scale2);														o1.position.set(-this.#BODY_WIDTH/2, -this.#BODY_HEIGHT/2, 0);
+					const o2 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MBlack'));
+					o2.scale.set(scale2, scale2, scale2);														o2.position.set( this.#BODY_WIDTH/2, -this.#BODY_HEIGHT/2, 0);
+					const o3 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlack'));
+					o3.scale.set(scale2, this.#BODY_WIDTH, scale2);		o3.rotation.set(Math.PI, 0, Math.PI/2);	o3.position.set(0, -this.#BODY_HEIGHT/2, 0);
+					const o4 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlack'));
+					o4.scale.set(scale2, DOWN_COVER_HEIGHT, scale2);	o4.rotation.set(Math.PI, 0, 0);			o4.position.set(-this.#BODY_WIDTH/2, -(this.#BODY_HEIGHT-DOWN_COVER_HEIGHT)/2, 0);
+					const o5 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlack'));
+					o5.scale.set(scale2, DOWN_COVER_HEIGHT, scale2);	o5.rotation.set(Math.PI, 0, 0);			o5.position.set( this.#BODY_WIDTH/2, -(this.#BODY_HEIGHT-DOWN_COVER_HEIGHT)/2, 0);
+					const o6 = new THREE.Mesh(this.getGeometry('Box'), this.getMaterial('MBlack'));		
+					o6.scale.set(this.#BODY_WIDTH, DOWN_COVER_HEIGHT, this.#BODY_DEPTH+this.#COVER_THICK*2);	o6.position.set(0, -(this.#BODY_HEIGHT-DOWN_COVER_HEIGHT)/2, 0);
+					
+					const p1 = new THREE.Mesh(this.getGeometry('RightBreast'), this.getMaterial('MRed'));
+					p1.scale.set(0.6,0.6,0.6);							p1.rotation.set(-Math.PI/2, 0, 0);		p1.position.set( 0.9, 2.1, 1.3);
+					const p2 = new THREE.Mesh(this.getGeometry('RightBreast'), this.getMaterial('MRed'));
+					p2.scale.set(0.6,0.6,0.6);							p2.rotation.set(Math.PI/2, Math.PI, 0);	p2.position.set(-0.9, 2.1, 1.3);
+					const body = new THREE.Group();
+
+					body.add(m0, m1, m2, m3, m4, m5, m6, m7, m8, m9, n1, n2, n3, n4, n5, n6, o1, o2, o3, o4, o5, o6, p1, p2);
+					this.#head = this.#createHead();			this.#head.position.set(0, 3.8, 0);
+					this.#rightArm = this.#createRightArm();
+					this.#rightArm.rotation.set(0, 0, -0.3);	this.#rightArm.position.set(-2.5, 2.3, 0);
+					this.#leftArm = this.#createLeftArm();
+					this.#leftArm.rotation.set(0, 0, 0.3);		this.#leftArm.position.set(2.5, 2.3, 0);
+					this.#rightFoot = this.#createRightFoot();
+					this.#rightFoot.rotation.set(0, 0, -0.05);	this.#rightFoot.position.set(-1.0, -3, 0);
+					this.#leftFoot = this.#createLeftFoot();
+					this.#leftFoot.rotation.set(0, 0, 0.05);	this.#leftFoot.position.set( 1.0, -3, 0);
+					body.add(this.#head, this.#rightArm, this.#leftArm, this.#rightFoot, this.#leftFoot);
+					
+					for (let i = 0; i < 5; ++i) {
+						const f1 = new THREE.Mesh(this.getGeometry('RightBreast'), this.getMaterial('MGlassRed'));
+						f1.scale.set(0.6,0.6,0.6);						f1.rotation.set(-Math.PI/2, 0, 0);		f1.position.set( 0.9, 2.1, 1.3);
+						const f2 = new THREE.Mesh(this.getGeometry('RightBreast'), this.getMaterial('MGlassRed'));
+						f2.scale.set(0.6,0.6,0.6);						f2.rotation.set(Math.PI/2, Math.PI, 0);	f2.position.set(-0.9, 2.1, 1.3);
+						const fire = new THREE.Group();
+						fire.add(f1, f2);
+						body.add(fire);
+						this.#fire.push(fire);
+					}
+					return body;
+				}
+
+				#createAnkle() {
+					const m1 = new THREE.Mesh(this.getGeometry('QuarterSphere'), this.getMaterial('MBlue'));
+					m1.scale.set(1.08, 1.0, 2.5);
+					const m2 = new THREE.Mesh(this.getGeometry('QuarterSphere'), this.getMaterial('MBlue'));
+					m2.scale.set(1.08, 0.4, 2.5);			m2.rotation.set(0, 0, Math.PI);
+					const m3 = new THREE.Mesh(this.getGeometry('QuarterSphere'), this.getMaterial('MBlue'));
+					m3.scale.set(1.08, 1.0, 0.9);			m3.rotation.set(0, Math.PI, 0);
+					const m4 = new THREE.Mesh(this.getGeometry('QuarterSphere'), this.getMaterial('MBlue'));
+					m4.scale.set(1.08, 0.4, 0.9);			m4.rotation.set(0, Math.PI, Math.PI);
+					const ankle = new THREE.Group();
+					ankle.add(m1, m2, m3, m4);
+					return ankle;
+				}
+				#createRightLeg() {
+					const scale1 = this.#FOOT_THICK/2;
+					const scale2 = scale1+this.#COVER_THICK;
+					const m1 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m1.scale.set(scale1, scale1, scale1);
+					const m2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MWhite'));
+					m2.scale.set(scale1, this.#FOOT_HEIGHT*0.5, scale1);						m2.position.set(0, -this.#FOOT_HEIGHT*0.25, 0);
+					const m3 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m3.scale.set(scale1, scale1, scale1);										m3.position.set(0, -this.#FOOT_HEIGHT*0.5, 0);
+					
+					const DOWN_COVER_HEIGHT = this.#FOOT_HEIGHT*0.5;
+					const n1 = new THREE.Mesh(this.getGeometry('Torus'), this.getMaterial('MBlue'));
+					n1.scale.set(scale1, scale1, scale1);	n1.rotation.set(-Math.PI/2, 0, 0);	n1.position.set(0, -this.#FOOT_HEIGHT*0.5 + DOWN_COVER_HEIGHT, 0);
+					const n2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlue'));
+					n2.scale.set(scale2, DOWN_COVER_HEIGHT, scale2);							n2.position.set(0, -this.#FOOT_HEIGHT*0.5 + DOWN_COVER_HEIGHT/2, 0);
+					const n3 = new THREE.Mesh(this.getGeometry('Torus'), this.getMaterial('MBlue'));
+					n3.scale.set(scale1, scale1, scale1);	n3.rotation.set(Math.PI/2, 0, 0);	n3.position.set(0, -this.#FOOT_HEIGHT*0.5, 0);
+					this.#rightAnkle = this.#createAnkle();										this.#rightAnkle.position.set(0, -this.#FOOT_HEIGHT*0.5-0.55, -0.3);
+
+					const leg = new THREE.Group();
+					leg.add(m1, m2, m3, n1, n2, n3, this.#rightAnkle);
+					return leg;
+				}
+				#createRightFoot() {
+					const scale1 = this.#FOOT_THICK/2;
+					const scale2 = scale1+this.#COVER_THICK;
+					const m1 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m1.scale.set(scale1, scale1, scale1);
+					const m2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MWhite'));
+					m2.scale.set(scale1, this.#FOOT_HEIGHT*0.5, scale1);						m2.position.set(0, -this.#FOOT_HEIGHT*0.25, 0);
+					
+					const UP_COVER_HEIGHT = 0.5;
+					const o1 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlack'));
+					o1.scale.set(scale2, UP_COVER_HEIGHT, scale2);								o1.position.set(0, UP_COVER_HEIGHT*0.5+0.4, 0);
+					const o2 = new THREE.Mesh(this.getGeometry('Torus'), this.getMaterial('MBlack'));
+					o2.scale.set(scale1, scale1, scale1);	o2.rotation.set(Math.PI/2, 0, );	o2.position.set(0, 0.4, 0);
+					
+					this.#rightLeg = this.#createRightLeg();									this.#rightLeg.position.set(0, -this.#FOOT_HEIGHT*0.5, 0);
+					const foot = new THREE.Group();
+					foot.add(m1, m2, o1, o2, this.#rightLeg);
+					return foot;
+				}
+				
+				#createLeftLeg() {
+					const scale1 = this.#FOOT_THICK/2;
+					const scale2 = scale1+this.#COVER_THICK;
+					const m1 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m1.scale.set(scale1, scale1, scale1);
+					const m2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MWhite'));
+					m2.scale.set(scale1, this.#FOOT_HEIGHT*0.5, scale1);						m2.position.set(0, -this.#FOOT_HEIGHT*0.25, 0);
+					const m3 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m3.scale.set(scale1, scale1, scale1);										m3.position.set(0, -this.#FOOT_HEIGHT*0.5, 0);
+					
+					const DOWN_COVER_HEIGHT = this.#FOOT_HEIGHT*0.5;
+					const n1 = new THREE.Mesh(this.getGeometry('Torus'), this.getMaterial('MBlue'));
+					n1.scale.set(scale1, scale1, scale1);	n1.rotation.set(-Math.PI/2, 0, 0);	n1.position.set(0, -this.#FOOT_HEIGHT*0.5 + DOWN_COVER_HEIGHT, 0);
+					const n2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlue'));
+					n2.scale.set(scale2, DOWN_COVER_HEIGHT, scale2);							n2.position.set(0, -this.#FOOT_HEIGHT*0.5 + DOWN_COVER_HEIGHT/2, 0);
+					const n3 = new THREE.Mesh(this.getGeometry('Torus'), this.getMaterial('MBlue'));
+					n3.scale.set(scale1, scale1, scale1);	n3.rotation.set(Math.PI/2, 0, 0);	n3.position.set(0, -this.#FOOT_HEIGHT*0.5, 0);
+					
+					this.#leftAnkle = this.#createAnkle();										this.#leftAnkle.position.set(0, -this.#FOOT_HEIGHT*0.5-0.55, -0.3);
+
+					const leg = new THREE.Group();
+					leg.add(m1, m2, m3, n1, n2, n3, this.#leftAnkle);
+					return leg;
+				}
+				#createLeftFoot() {
+					const scale1 = this.#FOOT_THICK/2;
+					const scale2 = scale1+this.#COVER_THICK;
+					const m1 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m1.scale.set(scale1, scale1, scale1);
+					const m2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MWhite'));
+					m2.scale.set(scale1, this.#FOOT_HEIGHT*0.5, scale1);						m2.position.set(0, -this.#FOOT_HEIGHT*0.25, 0);
+					
+					const UP_COVER_HEIGHT = 0.5;
+					const o1 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlack'));
+					o1.scale.set(scale2, UP_COVER_HEIGHT, scale2);								o1.position.set(0, UP_COVER_HEIGHT*0.5+0.4, 0);
+					const o2 = new THREE.Mesh(this.getGeometry('Torus'), this.getMaterial('MBlack'));
+					o2.scale.set(scale1, scale1, scale1);	o2.rotation.set(Math.PI/2, 0, );	o2.position.set(0, 0.4, 0);
+					
+					this.#leftLeg = this.#createLeftLeg();										this.#leftLeg.position.set(0, -this.#FOOT_HEIGHT*0.5, 0);
+					const foot = new THREE.Group();
+					foot.add(m1, m2, o1, o2, this.#leftLeg);
+					return foot;
+				}
+
+				#createThumb(material) {
+					const m1 = new THREE.Mesh(this.getGeometry('Sphere'),	material);	m1.scale.set(1, 1, 1);	m1.position.set(0, 2, 0);
+					const m2 = new THREE.Mesh(this.getGeometry('Cylinder'), material);	m2.scale.set(1, 2, 1);	m2.position.set(0, 1, 0);
+					const m3 = new THREE.Mesh(this.getGeometry('Sphere'),	material);
+					const g1 = new THREE.Group();	g1.add(m1, m2, m3);	g1.rotation.set(Math.PI*0.4, 0, 0);		g1.position.set(0, 3, 0);
+					const m4 = new THREE.Mesh(this.getGeometry('Cylinder'), material);	m4.scale.set(1, 3, 1);	m4.position.set(0, 1.5, 0);
+					const m5 = new THREE.Mesh(this.getGeometry('Sphere'),	material);
+					const g2 = new THREE.Group();	g2.add(g1, m4, m5);	g2.rotation.set(Math.PI/2, 0, 0);
+					const thumb = new THREE.Group();
+					thumb.add(g2);
+					return thumb;
+				}
+				#createFinger(material) {
+					const m1 = new THREE.Mesh(this.getGeometry('Sphere'),	material);							m1.position.set(0, 2, 0);
+					const m2 = new THREE.Mesh(this.getGeometry('Cylinder'), material);	m2.scale.set(1, 2, 1);	m2.position.set(0, 1, 0);
+					const m3 = new THREE.Mesh(this.getGeometry('Sphere'),	material);
+					const g1 = new THREE.Group();	g1.add(m1, m2, m3);	g1.rotation.set(Math.PI*0.4, 0, 0);		g1.position.set(0, 2, 0);
+					const m4 = new THREE.Mesh(this.getGeometry('Cylinder'), material);	m4.scale.set(1, 2, 1);	m4.position.set(0, 1, 0);
+					const m5 = new THREE.Mesh(this.getGeometry('Sphere'),	material);
+					const g2 = new THREE.Group();	g2.add(g1, m4, m5);	g2.rotation.set(Math.PI/2, 0, 0);		g2.position.set(0, 3, 0);
+					const m6 = new THREE.Mesh(this.getGeometry('Cylinder'), material);	m6.scale.set(1, 3, 1);	m6.position.set(0, 1.5, 0);
+					const m7 = new THREE.Mesh(this.getGeometry('Sphere'),	material);
+					const g3 = new THREE.Group();	g3.add(g2, m6, m7);	g3.rotation.set(Math.PI/2, 0, 0);
+					const finger = new THREE.Group();
+					finger.add(g3);
+					return finger;
+				}
+
+				#createRightPalm(material) {
+					const g1 = super.createPolygonGeometry([[2,-4], [3.6+0.5, -1+1.5], [3, 2.7+1.5], [1, 3+1.5], [-1, 2.5+1.5], [-3, 2+1.5], [-4,2], [-4, 0], [-2,-4]], 2.2);
+					const m1 = new THREE.Mesh(g1, material);
+					m1.rotation.set(-Math.PI/2, 0, 0);
+					const palm = new THREE.Group();
+					palm.add(m1);
+					return palm;
+				}
+				#createRightHand(material){
+					const m1 = this.#createRightPalm(material);	m1.scale.set(0.1, 0.1, 0.1);										m1.position.set( 0,    -0.1, -0.1);
+					const f1 = this.#createThumb(material);		f1.scale.set(0.1, 0.1, 0.1);	f1.rotation.set( 0, 0, -Math.PI/2);	f1.position.set( 0.36, -0.1,  0);
+					const f2 = this.#createFinger(material);	f2.scale.set(0.1, 0.1, 0.1);										f2.position.set( 0.30,  0.27, 0);
+					const f3 = this.#createFinger(material);	f3.scale.set(0.1, 0.1, 0.1);										f3.position.set( 0.10,  0.30, 0);
+					const f4 = this.#createFinger(material);	f4.scale.set(0.1, 0.1, 0.1);										f4.position.set(-0.10,  0.25, 0);
+					const f5 = this.#createFinger(material);	f5.scale.set(0.1, 0.1, 0.1);										f5.position.set(-0.30,  0.20, 0);
+					const hand = new THREE.Group();
+					hand.add(m1, f1, f2, f3, f4, f5);
+					return hand;
+				}
+				#createRightForearm() {
+					const scale1 = this.#ARM_THICK/2;
+					const scale2 = scale1+this.#COVER_THICK/7;
+					const scale3 = scale1+this.#COVER_THICK;
+					const m1 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m1.scale.set(scale1, scale1, scale1);
+					const m2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MWhite'));
+					m2.scale.set(scale1, this.#ARM_HEIGHT*0.5, scale1);							m2.position.set(0, -this.#ARM_HEIGHT*0.25, 0);
+					const m3 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m3.scale.set(scale1, scale1, scale1);										m3.position.set(0, -this.#ARM_HEIGHT*0.5, 0);
+					const DOWN_COVER_HEIGHT = this.#ARM_HEIGHT*0.5+scale1;
+					const n1 = new THREE.Mesh(this.getGeometry('Torus'), this.getMaterial('MBlue'));
+					n1.scale.set(scale2, scale2, scale2);	n1.rotation.set(-Math.PI/2, 0, 0);	n1.position.set(0, -this.#ARM_HEIGHT*0.5 + DOWN_COVER_HEIGHT-scale1, 0);
+					const n2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlue'));
+					n2.scale.set(scale3, DOWN_COVER_HEIGHT, scale3);							n2.position.set(0, -this.#ARM_HEIGHT*0.5 + DOWN_COVER_HEIGHT/2-scale1, 0);
+					const n3 = new THREE.Mesh(this.getGeometry('Torus'), this.getMaterial('MBlue'));
+					n3.scale.set(scale2, scale2, scale2);	n3.rotation.set(Math.PI/2, 0, 0);	n3.position.set(0, -this.#ARM_HEIGHT*0.5-scale1, 0);
+					const h1 = this.#createRightHand(this.getMaterial('MDarkBlue'));
+					h1.scale.set(2.2, 2.2, 2.2);	h1.rotation.set(0, Math.PI/2, Math.PI);	h1.position.set(-0.1, -this.#ARM_HEIGHT*0.5-1.07, -0.1);
+					const forearm = new THREE.Group();
+					forearm.add(m1, m2, m3, n1, n2, n3, h1);
+					return forearm;
+				}
+				#createRightArm() {
+					const scale1 = this.#ARM_THICK/2;
+					const scale2 = scale1+this.#COVER_THICK/7;
+					const scale3 = scale1+this.#COVER_THICK;
+					const m1 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m1.scale.set(scale1, scale1, scale1);
+					const m2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MWhite'));
+					m2.scale.set(scale1, this.#ARM_HEIGHT/2, scale1);												m2.position.set(0, -this.#ARM_HEIGHT*0.25, 0);
+					const UP_COVER_HEIGHT = 0.5;
+					const o1 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MBlack'));
+					o1.scale.set(scale3, scale3, scale3);
+					const o2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlack'));
+					o2.scale.set(scale3, UP_COVER_HEIGHT, scale3);													o2.position.set(0, -UP_COVER_HEIGHT*0.5, 0);
+					const o3 = new THREE.Mesh(this.getGeometry('Torus'), this.getMaterial('MBlack'));
+					o3.scale.set(scale2, scale2, scale2);				o3.rotation.set(Math.PI/2, 0, 0);			o3.position.set(0, -UP_COVER_HEIGHT, 0);
+					this.#rightForearm = this.#createRightForearm();	this.#rightForearm.rotation.set(0, 0, 0);	this.#rightForearm.position.set(0, -this.#ARM_HEIGHT*0.5, 0);
+					const arm = new THREE.Group();
+					arm.add(m1, m2, o1, o2, o3, this.#rightForearm);
+					return arm;
+				}
+
+				#createLeftPalm(material) {
+					const g1 = super.createPolygonGeometry([[2,-4], [3.6+0.5, -1+1.5], [3, 2.7+1.5], [1, 3+1.5], [-1, 2.5+1.5], [-3, 2+1.5], [-4,2], [-4, 0], [-2,-4]], 2.2);
+					const m1 = new THREE.Mesh(g1, material);
+					m1.rotation.set(-Math.PI/2, 0, Math.PI);
+					const palm = new THREE.Group();
+					palm.add(m1);
+					return palm;
+				}
+				#createLeftHand(material){
+					const m1 = this.#createLeftPalm(material);	m1.scale.set(0.1, 0.1, 0.1);										m1.position.set(0,     -0.1, -0.1);
+					const f1 = this.#createThumb(material);		f1.scale.set(0.1, 0.1, 0.1);	f1.rotation.set(0, 0, Math.PI/2);	f1.position.set(-0.36, -0.1, 0);
+					const f2 = this.#createFinger(material);	f2.scale.set(0.1, 0.1, 0.1);										f2.position.set(-0.30, 0.27, 0);
+					const f3 = this.#createFinger(material);	f3.scale.set(0.1, 0.1, 0.1);										f3.position.set(-0.10, 0.30, 0);
+					const f4 = this.#createFinger(material);	f4.scale.set(0.1, 0.1, 0.1);										f4.position.set( 0.10, 0.25, 0);
+					const f5 = this.#createFinger(material);	f5.scale.set(0.1, 0.1, 0.1);										f5.position.set( 0.30, 0.20, 0);
+					const hand = new THREE.Group();
+					hand.add(m1, f1, f2, f3, f4, f5);
+					return hand;
+				}
+				#createLeftForearm() {
+					const scale1 = this.#ARM_THICK/2;
+					const scale2 = scale1+this.#COVER_THICK/7;
+					const scale3 = scale1+this.#COVER_THICK;
+					const m1 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m1.scale.set(scale1, scale1, scale1);
+					const m2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MWhite'));
+					m2.scale.set(scale1, this.#ARM_HEIGHT/2, scale1);							m2.position.set(0, -this.#ARM_HEIGHT*0.25, 0);
+					const m3 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m3.scale.set(scale1, scale1, scale1);										m3.position.set(0, -this.#ARM_HEIGHT*0.5, 0);
+					const DOWN_COVER_HEIGHT = this.#ARM_HEIGHT*0.5+scale1;
+					const n1 = new THREE.Mesh(this.getGeometry('Torus'), this.getMaterial('MBlue'));
+					n1.scale.set(scale2, scale2, scale2);	n1.rotation.set(-Math.PI/2, 0, 0);	n1.position.set(0, -this.#ARM_HEIGHT*0.5 + DOWN_COVER_HEIGHT-scale1, 0);
+					const n2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlue'));
+					n2.scale.set(scale3, DOWN_COVER_HEIGHT, scale3);							n2.position.set(0, -this.#ARM_HEIGHT*0.5 + DOWN_COVER_HEIGHT/2-scale1, 0);
+					const n3 = new THREE.Mesh(this.getGeometry('Torus'), this.getMaterial('MBlue'));
+					n3.scale.set(scale2, scale2, scale2);	n3.rotation.set(Math.PI/2, 0, 0);	n3.position.set(0, -this.#ARM_HEIGHT*0.5-scale1, 0);
+					const h1 = this.#createLeftHand(this.getMaterial('MDarkBlue'));
+					h1.scale.set(2.2, 2.2, 2.2);		h1.rotation.set(0, -Math.PI/2, Math.PI);	h1.position.set(0.1, -this.#ARM_HEIGHT*0.5-1.07, 0);
+					const forearm = new THREE.Group();
+					forearm.add(m1, m2, m3, n1, n2, n3, h1);
+					return forearm;
+				}
+				#createLeftArm() {
+					const scale1 = this.#ARM_THICK/2;
+					const scale2 = scale1+this.#COVER_THICK/7;
+					const scale3 = scale1+this.#COVER_THICK;
+					const m1 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MWhite'));
+					m1.scale.set(scale1, scale1, scale1);
+					const m2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MWhite'));
+					m2.scale.set(scale1, this.#ARM_HEIGHT/2, scale1);							m2.position.set(0, -this.#ARM_HEIGHT*0.25, 0);
+					const UP_COVER_HEIGHT = 0.5;
+					const o1 = new THREE.Mesh(this.getGeometry('Sphere'), this.getMaterial('MBlack'));
+					o1.scale.set(scale3, scale3, scale3);
+					const o2 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('MBlack'));
+					o2.scale.set(scale3, UP_COVER_HEIGHT, scale3);								o2.position.set(0, -UP_COVER_HEIGHT*0.5, 0);
+					const o3 = new THREE.Mesh(this.getGeometry('Torus'), this.getMaterial('MBlack'));
+					o3.scale.set(scale2, scale2, scale2);	o3.rotation.set(Math.PI/2, 0, 0);	o3.position.set(0, -UP_COVER_HEIGHT, 0);
+					this.#leftForearm = this.#createLeftForearm();	this.#leftForearm.rotation.set(0, 0, 0);	this.#leftForearm.position.set(0, -this.#ARM_HEIGHT*0.5, 0);
+					const arm = new THREE.Group();
+					arm.add(m1, m2, o1, o2, o3, this.#leftForearm);
+					return arm;
+				}
+
+				#createRightBreastGeometry() { return super.createPolygonGeometry([[-1.0,-1.0], [2.0,-0.5], [3.0,2.3], [4.0,3.0], [2.5,2.7], [1.1, 1.3], [-1.0,0.9]], 0.2); }
+				#createRightEyeGeometry() { return super.createPolygonGeometry([[-1,-1], [2,-1], [3,1], [0,1]], 0.2); }
+				constructor() {
+					super();
+					this.#geometryMap.set('Neck',			new THREE.CylinderGeometry(0.45, 0.55, 0.7, 8, 1, false)); 
+					this.#geometryMap.set('Head1',			super.createCylinderGeometry(0.77, 0.67, 0.45, 0.1,  60, -Math.PI*0.35, Math.PI*0.7, -Math.PI*0.35, Math.PI*0.7));
+					this.#geometryMap.set('Head2',			super.createCylinderGeometry(0.67, 0.57, 0.35, 0.1, 160,  Math.PI*0.65, Math.PI*1.7,  Math.PI*0.55, Math.PI*1.9));
+					this.#geometryMap.set('RightBreast',	this.#createRightBreastGeometry());
+					this.#geometryMap.set('RightEye',		this.#createRightEyeGeometry());
+
+					this.#body = this.#createBody();			this.#body.position.set(0, 11.5, 0);
+					this.#object = new THREE.Group();
+					this.#object.add(this.#body);
+					this.setState("pilderOff");
+				}
+				setPilder(pilder) { this.#pilder = pilder; }
+				setState(state = "pilderOff") {
+					if (this.#state == state) { return; }
+					this.#state = state;
+					switch (state) {
+					case "pilderOn":
+						this.#leftEye .material = this.getMaterial('MGold');
+						this.#rightEye.material = this.getMaterial('MGold');
+						break;
+					case "pilderOff":
+						this.#leftEye .material = this.getMaterial('MDarkGold');
+						this.#rightEye.material = this.getMaterial('MDarkGold');
+						break;
+					case "breastFire":
+					case "beam":
+					case "rust":
+					case "punch":
+					case "walk":
+						this.#inAnimation = true;
+						this.#animationStep = 0;
+						break;
+					}
+				}
+
+				animate() {
+					if (!this.#inAnimation) { return false; }
+					console.log(this.#state);
+					switch (this.#state) {
+					case "pilderOn":
+						return false;
+					case "pilderOff":
+						return false;
+						
+					case "breastFire":
+						switch (this.#animationStep) {
+						case 0:
+							this.tmp1 = this.#leftForearm.rotation.x;
+							this.tmp2 = this.#rightForearm.rotation.x;
+							this.tmp3 = this.#leftArm.rotation.x;
+							this.tmp4 = this.#leftArm.rotation.z;
+							this.tmp5 = this.#rightArm.rotation.x;
+							this.tmp6 = this.#rightArm.rotation.z;
+							this.#animationStep = 1;
+							break;
+						case 1:
+							this.#leftForearm.rotation.x  -= 0.03;
+							this.#rightForearm.rotation.x -= 0.03;
+							if (this.#leftForearm.rotation.x < -Math.PI/2) { this.#animationStep = 2; }
+							break;
+						case 2:
+							this.#leftArm.rotation.x  -= 0.01;
+							this.#leftArm.rotation.z  += 0.01;
+							this.#rightArm.rotation.x -= 0.01;
+							this.#rightArm.rotation.z -= 0.01;
+							if (this.#leftArm.rotation.x < -Math.PI/2*.9) {
+								this.#fire.forEach((fire) => fire.position.set(0, 0, 0.0001));
+								this.#animationStep = 3;
+							}
+							break;
+						case 3:
+							for (let i = 0; i < this.#fire.length; ++i) {
+								if (this.#fire[this.#fire.length-1].position.z == 0) { this.#animationStep = 4; break; }
+								if (this.#fire[i].position.z == 0) { continue; }
+								if (i != 0 && this.#fire[i-1].position.z != 0 && this.#fire[i-1].position.z < 5) { continue; }
+								this.#fire[i].position.z += 0.2;
+								this.#fire[i].position.y -= 0.06;
+								if (this.#fire[i].position.z > 30) { this.#fire[i].position.set(0, 0, 0); }
+							}
+							break;
+						case 4:
+							this.#leftArm.rotation.x += 0.02;
+							this.#leftArm.rotation.z -= 0.02;
+							this.#rightArm.rotation.x += 0.02;
+							this.#rightArm.rotation.z += 0.02;
+							if (this.#leftArm.rotation.x >= this.tmp3-0.02 && this.#leftArm.rotation.x <= this.tmp3+0.02) { this.#animationStep = 5; }
+							break;
+						case 5:
+							this.#leftForearm.rotation.x += 0.04;
+							this.#rightForearm.rotation.x += 0.04;
+							if (this.#leftForearm.rotation.x >= this.tmp1-0.04 && this.#leftForearm.rotation.x <= this.tmp1+0.04) { this.#animationStep = 9999; }
+							break;
+						case 9999:
+							this.#leftForearm.rotation.x	= this.tmp1;
+							this.#rightForearm.rotation.x	= this.tmp2;
+							this.#leftArm.rotation.x		= this.tmp3;
+							this.#leftArm.rotation.z		= this.tmp4;
+							this.#rightArm.rotation.x		= this.tmp5;
+							this.#rightArm.rotation.z		= this.tmp6;
+							this.#animationStep = 0;
+							this.setState("pilderOn");
+							break;
+						}
+						return true;
+						
+					case "beam":
+						switch (this.#animationStep) {
+						case 0:
+							++this.#animationStep;
+							this.#beam.scale.z = 1;
+							break;
+						case 9999:
+							this.#animationStep = 0;
+							this.#beam.scale.z = 0.01;
+							this.setState("pilderOn");
+							break;
+						default:
+							++this.#animationStep;
+							if (this.#animationStep < 300) { this.#beam.scale.z *= 1.03; }
+							if (this.#animationStep >= 500) { this.#animationStep = 9999; }
+							break;
+						}
+						return true;
+						
+					case "rust":
+						switch (this.#animationStep) {
+						case 0:
+							++this.#animationStep;
+							this.#rust.setState('START');
+							break;
+						case 9999:
+							this.#rust.setState('STOP');
+							this.#animationStep = 0;
+							this.setState("pilderOn");
+							break;
+						default:
+							++this.#animationStep;
+							this.#rust.animate();
+							if (this.#animationStep >= 500) { this.#animationStep = 9999; }
+							break;
+						}
+						return true;
+						
+					case "punch":
+						switch (this.#animationStep) {
+						case 0:
+							this.tmp1 = this.#rightArm.rotation.x;
+							this.tmp2 = this.#rightArm.rotation.z;
+							this.tmp3 = this.#rightForearm.rotation.y;
+							this.#animationStep = 1;
+							break;
+						case 1:
+							this.#rightArm.rotation.x -= 0.01;
+							this.#rightArm.rotation.z += 0.0033;
+							this.#rightForearm.rotation.y += 0.012;
+							if (this.#rightArm.rotation.x < -Math.PI/2*.82) {
+								this.#wait = 30;
+								this.#animationStep = 2;
+							}
+							break;
+						case 2:
+							--this.#wait;
+							if (this.#wait < 0) {
+								this.tmp4 = this.#rightForearm.position.y;
+								this.#animationStep = 3;
+							}
+							break;
+						case 3:
+							this.#rightForearm.position.y -= 0.2;
+							if (this.#rightForearm.position.y < -30) {
+								this.#rightForearm.position.y = this.tmp4;
+								this.#animationStep = 4;
+							}
+							break;
+						case 4:
+							this.#rightArm.rotation.x += 0.01;
+							this.#rightArm.rotation.z -= 0.0033;
+							this.#rightForearm.rotation.y -= 0.012;
+							if (this.#rightArm.rotation.x >= this.tmp1-0.01 && this.#rightArm.rotation.x <= this.tmp1+0.01) { this.#animationStep = 9999; }
+							break;
+						case 9999:
+							this.#rightArm.rotation.x = this.tmp1;
+							this.#rightArm.rotation.z = this.tmp2;
+							this.#rightForearm.rotation.y = this.tmp3;
+							this.#animationStep = 0;
+							this.setState("pilderOn");
+							break;
+						}
+						return true;
+					
+					case "walk":
+						switch (this.#animationStep) {
+						case 0:
+							this.period = 1000;
+							this.p_p   = this.#pilder.getObject().position.clone();
+							this.p_r   = this.#pilder.getObject().rotation.clone();
+							this.all_p = this.#object.position.clone();
+							this.all_r = this.#object.rotation.clone();
+							this.lf_r  = this.#leftFoot.rotation.clone();
+							this.rf_r  = this.#rightFoot.rotation.clone();
+							this.ll_r  = this.#leftLeg.rotation.clone();
+							this.rl_r  = this.#rightLeg.rotation.clone();
+							this.lak_r = this.#leftAnkle.rotation.clone();
+							this.rak_r = this.#rightAnkle.rotation.clone();
+							this.la_r  = this.#leftArm.rotation.clone();
+							this.ra_r  = this.#rightArm.rotation.clone();
+							this.lfa_r = this.#leftForearm.rotation.clone();
+							this.rfa_r = this.#rightForearm.rotation.clone();
+							this.#animationStep = 1;
+							break;
+						case 1:
+							this.#leftArm.rotation.z -= 0.01;
+							this.#rightArm.rotation.z += 0.01;
+							if (this.#leftArm.rotation.z < 0.15) { this.#animationStep = 2; }
+							break;
+						case 2000:
+							this.#leftArm.rotation.z += 0.01;
+							this.#rightArm.rotation.z -= 0.01;
+							if (this.#leftArm.rotation.z > 0.3) { this.#animationStep = 9999; }
+							break;
+						case 9999:
+							this.#pilder.getObject()	.position.set(this.p_p.x,	this.p_p.y,   this.p_p.z);
+							this.#pilder.getObject()	.rotation.set(this.p_r.x,	this.p_r.y,   this.p_r.z);
+							this.#object				.position.set(this.all_p.x, this.all_p.y, this.all_p.z);
+							this.#object				.rotation.set(this.all_r.x, this.all_r.y, this.all_r.z);
+							this.#leftFoot				.rotation.set(this.lf_r.x,  this.lf_r.y,  this.lf_r.z);
+							this.#rightFoot				.rotation.set(this.rf_r.x,  this.rf_r.y,  this.rf_r.z);
+							this.#leftLeg				.rotation.set(this.ll_r.x,  this.ll_r.y,  this.ll_r.z);
+							this.#rightLeg				.rotation.set(this.rl_r.x,  this.rl_r.y,  this.rl_r.z);
+							this.#leftAnkle				.rotation.set(this.lak_r.x, this.lak_r.y, this.lak_r.z);
+							this.#rightAnkle			.rotation.set(this.rak_r.x, this.rak_r.y, this.rak_r.z);
+							this.#leftArm				.rotation.set(this.la_r.x,  this.la_r.y,  this.la_r.z);
+							this.#rightArm				.rotation.set(this.ra_r.x,  this.ra_r.y,  this.ra_r.z);
+							this.#leftForearm			.rotation.set(this.lfa_r.x, this.lfa_r.y, this.lfa_r.z);
+							this.#rightForearm			.rotation.set(this.rfa_r.x, this.rfa_r.y, this.rfa_r.z);
+							
+							this.#animationStep = 0;
+							this.setState("pilderOn");
+							break;
+
+						default:
+							const t1 = Math.PI*2*this.#animationStep/this.period;
+							const cycle = this.period/10;
+							const t2 = this.#animationStep%cycle;
+
+							if (t2 < cycle*0.25) {
+								this.#leftFoot.rotation.x	-= 3.2/cycle;
+								this.#leftLeg.rotation.x	+= 4.0/cycle;
+								this.#leftAnkle.rotation.x	-= 0.8/cycle;
+								this.#rightArm.rotation.x	-= 2.0/cycle;
+
+								this.#rightFoot.rotation.x	+= 1.6/cycle;
+								this.#leftArm.rotation.x	+= 2.0/cycle;
+							}
+							else if (t2 < cycle*0.5) {
+								this.#leftFoot.rotation.x	+= 3.2/cycle;
+								this.#leftLeg.rotation.x	-= 4.0/cycle;
+								this.#leftAnkle.rotation.x	+= 0.8/cycle;
+								this.#rightArm.rotation.x	+= 2.0/cycle;
+
+								this.#rightFoot.rotation.x	-= 1.6/cycle;
+								this.#leftArm.rotation.x	-= 2.0/cycle;
+							}
+							else if (t2 < cycle*0.75) {
+								this.#leftFoot.rotation.x	+= 1.6/cycle;
+								this.#rightArm.rotation.x	+= 2.0/cycle;
+
+								this.#rightFoot.rotation.x	-= 3.2/cycle;
+								this.#rightLeg.rotation.x	+= 4.0/cycle;
+								this.#rightAnkle.rotation.x	-= 0.8/cycle;
+								this.#leftArm.rotation.x	-= 2.0/cycle;
+							}
+							else {
+								this.#leftFoot.rotation.x	-= 1.6/cycle;
+								this.#rightArm.rotation.x	-= 2.0/cycle;
+
+								this.#rightFoot.rotation.x	+= 3.2/cycle;
+								this.#rightLeg.rotation.x	-= 4.0/cycle;
+								this.#rightAnkle.rotation.x	+= 0.8/cycle;
+								this.#leftArm.rotation.x	+= 2.0/cycle;
+							}
+							this.#object.position.set(20*(Math.cos(t1)-1), 0, 20*Math.sin(t1)-5);
+							this.#object.rotation.set(0, -t1, 0);
+							this.#pilder.getObject().position.set(20*(Math.cos(t1)-1), this.#pilder.getObject().position.y, 20*Math.sin(t1)-5);
+							this.#pilder.getObject().rotation.set(0, -t1, 0);
+							++this.#animationStep;
+							if (this.#animationStep == this.period) { this.#animationStep = 2000; }
+							break;
+						}
+						return true;
+					}
+					return false;
+				}
+				getObject() { return this.#object; }
+				// for debug
+				getDebug() { return this.#createRightArm(); }
+			}
+			
+			const canvas		= document.querySelector('#canvas');
+			const pilderOn		= document.getElementById('pilderOn');
+			const pilderOff		= document.getElementById('pilderOff');
+			const breastFire 	= document.getElementById('breastFire');
+			const beam			= document.getElementById('beam');
+			const rust			= document.getElementById('rust');
+			const walk			= document.getElementById('walk');
+
+			function getWidth()  { return canvas.getBoundingClientRect().width; }
+			function getHeight() { return canvas.getBoundingClientRect().height; }
+	
+			const scene = new THREE.Scene();
+			const directionLight = new THREE.DirectionalLight(0xffffff, 2);
+			directionLight.position.set(1, 1, 1);
+			directionLight.target.position.set(0, 0, 0);
+			scene.add(directionLight);
+			scene.add(new THREE.AmbientLight(0x999999, 1));
+			
+			const field = new THREE.Mesh(new THREE.BoxGeometry(100, 1, 100), new THREE.MeshStandardMaterial({color: 0x31180c}));
+			field.position.set(0, -0.6, 0);
+
+			const z = new Z();
+			const object = z.getObject();
+			z.getObject().position.set(0, 0, -5);
+
+			const pilder = new HoverPilder();
+			pilder.getObject().scale.set(0.18, 0.18, 0.18);
+			pilder.getObject().rotation.set(0, Math.PI/2, 0);
+			z.setPilder(pilder);
+			
+			const renderer = new THREE.WebGLRenderer();
+			renderer.setSize(getWidth(), getHeight());
+			renderer.setClearColor(0xaaaaaa);
+			canvas.appendChild(renderer.domElement);
+			
+			const camera = new THREE.PerspectiveCamera(70, getWidth()/getHeight(), 0.1, 1000);
+			const controls = new THREE.OrbitControls(camera, renderer.domElement);
+			Object.assign(controls, {rotateSpeed: 0.2, panSpeed: 0.3, enableDamping: true, dampingFactor: 0.05});
+
+			scene.add(field, z.getObject(), pilder.getObject());
+			camera.position.set(0, 8, 16);
+			controls.target = new THREE.Vector3(0, 8, -8);
+/*
+			scene.add(z.getDebug());
+			camera.position.set(0, -3, 10);
+			controls.target = new THREE.Vector3(0, -3, 0);
+
+			scene.add(pilder.getObject());
+			camera.position.set(0, 20, 0);
+			controls.target = new THREE.Vector3(0, 0, 0);
+*/
+
+			const ON_HEIGHT  = 16.75;
+			const MAX_HEIGHT = ON_HEIGHT*1.15;
+			const OFF_HEIGHT =  0.5;
+			const MAX_RADIUS = 9;
+			let theta = 0;
+			let speed = 0.01;
+			let time = 0;
+			const STATE = Object.freeze({
+				ON:  "ON",		ON1:  "ON1",	ON2:  "ON2",	ON3:  "ON3",	ON4:  "ON4",	ON5:  "ON5",
+				OFF: "OFF",		OFF1: "OFF1",	OFF2: "OFF2",	OFF3: "OFF3",	OFF4: "OFF4",	OFF5: "OFF5",	OFF6: "OFF6",
+								BF:   "BF",		BEAM: "BEAM",	RUST: "RUST",	PUNCH:"PUNCH",
+								WALK: "WALK",
+			});
+			let _state;
+
+			let height = OFF_HEIGHT;
+			let radius = MAX_RADIUS;
+			setState(STATE.OFF);
+			z.setState("pilderOff");
+			pilder.setState("closed")
+			
+			function getState() { return _state; }
+			function setState(state) {
+				console.log(state, time);
+				_state = state;
+				[pilderOff, pilderOn, breastFire, beam, rust, punch, walk].forEach((button) => button.disabled = true);
+				switch (state) {
+				case STATE.ON:		z.setState("pilderOn");	[pilderOff, breastFire, beam, rust, punch, walk].forEach((button) => button.disabled = false);	break;
+				case STATE.ON1:		pilder.setState("opening");	break;
+				case STATE.ON2:		break;
+				case STATE.ON3:		break;
+				case STATE.ON4:		pilder.setState("closing");	break;
+				case STATE.ON5:		break;
+				
+				case STATE.OFF:		pilderOn.disabled = false;	break;
+				case STATE.OFF1:	z.setState("pilderOff");	break;
+				case STATE.OFF2:	pilder.setState("opening");	break;
+				case STATE.OFF3:	break;
+				case STATE.OFF4:	break;
+				case STATE.OFF5:	break;
+				case STATE.OFF6:	pilder.setState("closing");	break;
+				
+				case STATE.BF:		z.setState("breastFire");	break;
+				case STATE.BEAM:	z.setState("beam");			break;
+				case STATE.RUST:	z.setState("rust");			break;
+				case STATE.PUNCH:	z.setState("punch");		break;
+				case STATE.SKIP:	z.setState("skip");			break;
+				case STATE.WALK:	z.setState("walk");			break;
+				default:			break;
+				}
+			}
+			
+			pilderOn	.addEventListener('click', () => { if (getState() == STATE.OFF) { time = 0; setState(STATE.ON1); }});
+			pilderOff	.addEventListener('click', () => { if (getState() == STATE.ON)  { time = 0; setState(STATE.OFF1); }});
+			breastFire	.addEventListener('click', () => { if (getState() == STATE.ON)  { time = 0; setState(STATE.BF); }});
+			beam		.addEventListener('click', () => { if (getState() == STATE.ON)  { time = 0; setState(STATE.BEAM); }});
+			rust		.addEventListener('click', () => { if (getState() == STATE.ON)  { time = 0; setState(STATE.RUST); }});
+			punch		.addEventListener('click', () => { if (getState() == STATE.ON)  { time = 0; setState(STATE.PUNCH); }});
+			walk		.addEventListener('click', () => { if (getState() == STATE.ON)  { time = 0; setState(STATE.WALK); }});
+			function animate() {
+				function addTheta(theta, delta) {
+					theta += delta; if (theta > Math.PI*2) { theta -= Math.PI*2; }
+					return theta;
+				}
+				controls.update();
+				renderer.setSize(getWidth(), getHeight());
+				renderer.render(scene, camera);
+//				renderer.render(scene, pilder.getCamera());
+				++time;
+				pilder.getObject().position.set(radius*Math.sin(theta), height, radius*Math.cos(theta)-5.4);
+				pilder.getObject().rotation.set(0, theta+Math.PI/2, 0);
+				const busy1 = z.animate();
+				const busy2 = pilder.animate();
+				if (busy1 || busy2) { return; }
+				
+				switch (getState()) {
+				case STATE.ON:
+				case STATE.OFF:
+					break;
+				case STATE.ON1:
+					speed = Math.max(Math.min(speed + 0.0002, 0.03), 0.01);
+					height = Math.min(height + speed*2, MAX_HEIGHT);
+					theta = addTheta(theta, speed);
+					if (height > MAX_HEIGHT*2/3) { setState(STATE.ON2); }
+					break;
+				case STATE.ON2:
+					speed = Math.max(speed - 0.0001, 0.01);
+					radius = Math.max(radius - 0.02, 0);
+					height = Math.min(height + speed*2, MAX_HEIGHT);
+					theta = addTheta(theta, speed);
+					if (height == MAX_HEIGHT) { setState(STATE.ON3); }
+					break;
+				case STATE.ON3:
+					radius = Math.max(radius - 0.04, 0);
+					if (theta >= Math.PI*1.5-0.01 && theta <= Math.PI*1.5+0.01) { theta = Math.PI*1.5; }
+					else { theta = addTheta(theta, 0.01); }
+					if (radius == 0 && theta == Math.PI*1.5) { setState(STATE.ON4); }
+					break;
+				case STATE.ON4:
+					height = Math.max(height - 0.02, ON_HEIGHT+0.5);
+					if (height == ON_HEIGHT+0.5) { setState(STATE.ON5); }
+					break;
+				case STATE.ON5:
+					height = Math.max(height - 0.01, ON_HEIGHT);
+					if (height == ON_HEIGHT) { setState(STATE.ON); }
+					break;
+
+				case STATE.OFF1:
+					height = Math.min(height + 0.02, MAX_HEIGHT);
+					if (height >= MAX_HEIGHT) { setState(STATE.OFF2); }
+					break;
+				case STATE.OFF2:
+					speed = Math.min(speed + 0.0002, 0.03);
+					radius = Math.min(radius + 0.04, MAX_RADIUS);
+					height = Math.max(height - 0.02, MAX_HEIGHT*0.7);
+					theta = addTheta(theta, 0.002);
+					if (radius >= MAX_RADIUS*0.6) { setState(STATE.OFF3); speed = 0; }
+					break;
+				case STATE.OFF3:
+					speed = Math.max(Math.min(speed + 0.0002, 0.03), 0.01);
+					radius = Math.min(radius + 0.03, MAX_RADIUS);
+					height = Math.max(height - Math.max(speed*2.1, 0.02), MAX_HEIGHT/4);
+					theta = addTheta(theta, speed);
+					if (radius == MAX_RADIUS) { setState(STATE.OFF4); }
+					break;
+				case STATE.OFF4:
+					height = Math.max(height - speed*2.1, MAX_HEIGHT*0.3);
+					theta = addTheta(theta, speed);
+					if (height <= MAX_HEIGHT*0.3) { setState(STATE.OFF5); }
+					break;
+				case STATE.OFF5:
+					speed = Math.max(speed - 0.0002, 0.01);
+					height = Math.max(height - speed*2.1, OFF_HEIGHT);
+					theta = addTheta(theta, speed);
+					if (height <= OFF_HEIGHT) { setState(STATE.OFF6); }
+					break;
+				case STATE.OFF6:
+					setState(STATE.OFF);
+					break;
+				
+				default:
+					setState(STATE.ON);
+					break;
+				}
+			}
+			renderer.setAnimationLoop(animate);
+		</script>
+	</body>
+</html>

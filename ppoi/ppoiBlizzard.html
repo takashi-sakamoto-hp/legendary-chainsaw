@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Ppoiをスキーに連れてって</title>
+	</head>
+	<body>
+		<h1>Ppoiをスキーに連れてって<hr></h1>
+		<a href="https://youtu.be/mChDBLd5SuQ" onclick="window.open('https://youtu.be/mChDBLd5SuQ', 'BGM', 'width=500,height=300,noopener'); return false;">BGM</a>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/109/three.min.js"></script>
+		<script>
+			const [WSEG, HSEG] = [64, 32];
+			const sphereGeometry = new THREE.SphereGeometry(1, WSEG, HSEG);
+			const cylinderGeometry = new THREE.CylinderGeometry(1.2, 0.8, 10.0, WSEG, 1, false); 
+			const renderer = new THREE.WebGLRenderer();
+			const scene = new THREE.Scene();
+			const camera = createCamera();
+			const back = createBackground();
+			let time = 0;
+			const materialMap = new Map();
+			function createMaterial(color) {
+				let material = materialMap.get(color);
+				if (material == null) {
+					material = new THREE.MeshStandardMaterial({color: color});
+					materialMap.set(color, material);
+				}
+				return material;
+			}
+			const ppoi1 = createPpoi(0x2060ff, 0x2020ff, 0x303030);
+			ppoi1.scale.set(0.5, 0.5, 0.5);
+			const ppoi2 = createPpoi(0xff4040, 0xff2020, 0x303030);
+			ppoi2.scale.set(0.5, 0.5, 0.5);
+			function createPpoi(bodyColor, eyeColor, tailColor) {
+				const ppoi = new THREE.Group();
+				const body  = new THREE.Mesh(sphereGeometry, createMaterial(bodyColor));
+				body.scale.set(8, 10, 4); 
+				body.position.set ( 0.0,   0.0,  0.0);
+				const lEye  = new THREE.Mesh(sphereGeometry, createMaterial(eyeColor));
+				lEye.rotation.set(-0.2, -0.3, 0);
+				lEye.scale.set(3.6, 4.5, 1.8);
+				lEye.position.set (-4.0,   4.0,  2.0);
+				const rEye  = new THREE.Mesh(sphereGeometry, createMaterial(eyeColor));
+				rEye.rotation.set(-0.2, 0.3, 0);
+				rEye.scale.set(3.6, 4.5, 1.8); 
+				rEye.position.set ( 4.0,   4.0,  2.0);
+				const tail  = new THREE.Mesh(cylinderGeometry, createMaterial(tailColor));
+				tail.position.set ( 0.0, -11.0, -1.0);
+				const tail2 = new THREE.Mesh(sphereGeometry, createMaterial(tailColor));
+				tail2.scale.set(0.8, 0.8, 0.8);
+				tail2.position.set( 0.0, -16.0, -1.0);
+				ppoi.add(body, lEye, rEye, tail, tail2);
+				return ppoi;
+			}
+			function createLight() {
+				const light = new THREE.DirectionalLight(0xffffff, 2);
+				light.position.set(1, 1, 1);
+				return light;
+			}
+			function createAmbientLight() { return new THREE.AmbientLight(0x999999, 2.0); }
+			function createBackground() {
+				const R = 200;
+				const SIZE = 30000;
+				const pos = [];
+				for (let i = 0; i < SIZE; ++i) { pos.push(R*(Math.random()-0.5), R*(Math.random()-0.5), R*(Math.random()-0.5)); }
+				const geometry = new THREE.BufferGeometry();
+				geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+				const material = new THREE.PointsMaterial({size:0.02, color:0xffffff});
+				return new THREE.Points(geometry, material);
+			}
+			function getWidth() { return window.innerWidth-20; }
+			function getHeight() { return window.innerHeight-150; }
+			function createCamera() {
+				const camera = new THREE.PerspectiveCamera(75, getWidth() / getHeight(), 1, 200);
+				camera.position.set(0, 0, 30);
+				camera.lookAt(new THREE.Vector3(0, -30, -50));
+				return camera;
+			}
+			function animate() {
+				++time;
+				scene.fog.density = 0.005 + Math.abs(Math.sin(time*0.002))*0.01;
+				back.rotation.x -= 0.02+Math.abs(Math.sin(time*0.002))*0.05;
+				ppoi1.rotation.set(-Math.PI/2*1.2, Math.sin(time*0.02)*Math.PI/4,      0);
+				ppoi1.position.set(-Math.sin(time*0.02)*20,      -Math.abs(Math.cos(time*0.02))*8-40,      -80);
+				ppoi2.rotation.set(-Math.PI/2*1.2, Math.sin((time-50)*0.02)*Math.PI/4, 0);
+				ppoi2.position.set(-Math.sin((time-50)*0.02)*20, -Math.abs(Math.cos((time-50)*0.02))*8-20, -10);
+				renderer.render(scene, camera);
+				requestAnimationFrame(animate);
+			}
+			function main() {
+				renderer.setSize(getWidth(), getHeight());
+				renderer.setClearColor(0xa0a0a0);
+				document.body.appendChild(renderer.domElement);
+				scene.add(createLight());
+				scene.add(createAmbientLight());
+				scene.add(back);
+				scene.fog = new THREE.FogExp2(0xffffff, 0.01);
+				scene.add(ppoi1);
+				scene.add(ppoi2);
+				console.log(ppoi1.toJSON());
+				renderer.render(scene, camera);
+				window.addEventListener('resize', () => {
+					renderer.setSize(getWidth(), getHeight());
+					camera.aspect = getWidth() / getHeight();
+					camera.updateProjectionMatrix();
+				});
+				animate();
+			}
+			main();
+		</script>
+	</body>
+</html>

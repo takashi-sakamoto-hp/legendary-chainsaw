@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta name="Author" content="Sakamoto Takashi">
+		<title>Amusement park(snow dome)</title>
+		<style>
+		#canvas	 { position: absolute; top: 0px; left: 0px; z-index: 0; }
+		</style>
+	</head>
+	<body>
+		<div id="canvas" style="width: 100%; height: 100%;"></div>
+		<script type="importmap">
+			{
+			  "imports": {
+				"three": "https://unpkg.com/three@0.164.0/build/three.module.js"
+			  }
+			}
+		</script>
+		<script type="module">
+		import * as THREE from 'three';
+		import { VRButton } from 'https://unpkg.com/three@0.164.0/examples/jsm/webxr/VRButton.js';
+		import { XRControllerModelFactory } from 'https://unpkg.com/three@0.164.0/examples/jsm/webxr/XRControllerModelFactory.js';
+		
+		class Attraction {
+			static #geometryMap = new Map();
+			getGeometry(key) { return Attraction.#geometryMap.get(key); }
+			hasGeometry(key) { return Attraction.#geometryMap.has(key); }
+			setGeometry(key, geometry) { Attraction.#geometryMap.set(key, geometry); }
+			
+			static #materialMap = new Map();
+			getMaterial(key) { return Attraction.#materialMap.get(key); }
+			hasMaterial(key) { return Attraction.#materialMap.has(key); }
+			setMaterial(key, material) { Attraction.#materialMap.set(key, material); }
+
+			getPoints(pointArray) {
+				const points = [];
+				pointArray.forEach(([x,y]) => points.push(new THREE.Vector2(x, y)));
+				return points;
+			}
+			getPath(pathStr, path = null) {
+				let elem = pathStr.match(/[A-Za-z]|-?\d+(\.\d+)?/g);
+				if (elem.length == 0) { throw new Error(); }
+				if (path == null) { path = new THREE.Path(); }
+				let index = 0;
+				while (index < elem.length) {
+					let token = elem[index++];
+					switch (token) {
+					case 'M':
+						if (index + 2 > elem.length) { throw new Error(); }
+						path.moveTo(Number(elem[index]), Number(elem[index+1]));
+						index += 2;
+						break;
+					case 'L':
+						if (index + 2 > elem.length) { throw new Error(); }
+						path.lineTo(Number(elem[index]), Number(elem[index+1]));
+						index += 2;
+						break;
+					case 'Q':
+						if (index + 4 > elem.length) { throw new Error(); }
+						path.quadraticCurveTo(
+							Number(elem[index]),   Number(elem[index+1]),
+							Number(elem[index+2]), Number(elem[index+3]));
+						index += 4;
+						break;
+					case 'C':
+						if (index + 6 > elem.length) { throw new Error(); }
+						path.bezierCurveTo(
+							Number(elem[index]),   Number(elem[index+1]),
+							Number(elem[index+2]), Number(elem[index+3]),
+							Number(elem[index+4]), Number(elem[index+5]));
+						index += 6;
+						break;
+					case 'Z':
+						path.closePath();
+						break;
+					default:
+						console.log('ignore: ' + token);
+						break;
+					}
+				}
+				return path;
+			}
+			getCurveXYZ(pathStr) {
+				function getVector3(ary, index) { return new THREE.Vector3(Number(ary[index]), Number(ary[index+1]), Number(ary[index+2])); }
+				let elem = pathStr.match(/[A-Za-z]|-?\d+(\.\d+)?/g);
+				if (elem.length == 0) { throw new Error(); }
+				const curve = new THREE.CurvePath();
+				let index = 0;
+				const ssp = new THREE.Vector3(0, 0, 0);
+				let sp = ssp; 
+				while (index < elem.length) {
+					let token = elem[index++];
+					switch (token) {
+						case 'M': {
+							if (index + 3 > elem.length) { throw new Error(); }
+							sp = getVector3(elem, index);
+							index += 3;
+						}
+						break;
+						
+						case 'L': {
+							if (index + 3 > elem.length) { throw new Error(); }
+							const ep = getVector3(elem, index);
+							curve.add(new THREE.LineCurve3(sp, ep));
+							sp = ep;
+							index += 3;
+						}
+						break;
+							
+						case 'Q': {
+							if (index + 6 > elem.length) { throw new Error(); }
+							const ep = getVector3(elem, index+3);
+							curve.add(new THREE.QuadraticBezierCurve3(sp, getVector3(elem, index), ep));
+							sp = ep;
+							index += 6;
+						}
+						break;
+							
+						case 'C': {
+							if (index + 9 > elem.length) { throw new Error(); }
+							const ep  = getVector3(elem, index+6);
+							curve.add(new THREE.CubicBezierCurve3(sp, getVector3(elem, index), getVector3(elem, index+3), ep));
+							sp = ep;
+							index += 9;
+						}
+						break;
+							
+						case 'Z':
+							curve.add(new THREE.LineCurve3(sp, ssp));
+							break;
+						
+						default:
+							console.log('ignore: ' + token);
+							break;
+					}
+				}
+				return curve;
+			}
+			getCurveXZ(pathStr) {
+				function getVector3(ary, index) { return new THREE.Vector3(Number(ary[index]), 0, Number(ary[index+1])); }
+				let elem = pathStr.match(/[A-Za-z]|-?\d+(\.\d+)?/g);
+				if (elem.length == 0) { throw new Error(); }
+				const curve = new THREE.CurvePath();
+				let index = 0;
+				const ssp = new THREE.Vector3(0, 0, 0);
+				let sp = ssp; 
+				while (index < elem.length) {
+					let token = elem[index++];
+					switch (token) {
+						case 'M': {
+							if (index + 2 > elem.length) { throw new Error(); }
+							sp = getVector3(elem, index);
+							index += 2;
+						}
+						break;
+						
+						case 'L': {
+							if (index + 2 > elem.length) { throw new Error(); }
+							const ep = getVector3(elem, index);
+							curve.add(new THREE.LineCurve3(sp, ep));
+							sp = ep;
+							index += 2;
+						}
+						break;
+							
+						case 'Q': {
+							if (index + 4 > elem.length) { throw new Error(); }
+							const ep = getVector3(elem, index+2);
+							curve.add(new THREE.QuadraticBezierCurve3(sp, getVector3(elem, index), ep));
+							sp = ep;
+							index += 4;
+						}
+						break;
+							
+						case 'C': {
+							if (index + 6 > elem.length) { throw new Error(); }
+							const ep  = getVector3(elem, index+4);
+							curve.add(new THREE.CubicBezierCurve3(sp, getVector3(elem, index), getVector3(elem, index+2), ep));
+							sp = ep;
+							index += 6;
+						}
+						break;
+							
+						case 'Z':
+							curve.add(new THREE.LineCurve3(sp, ssp));
+							break;
+						
+						default:
+							console.log('ignore: ' + token);
+							break;
+					}
+				}
+				return curve;
+			}
+			constructor() {
+				if (new.target === Attraction) { throw new Error('Cannot instansiate Attraction'); }
+				
+				this.setGeometry('Box',			new THREE.BoxGeometry(1, 1, 1));
+				this.setGeometry('Sphere',		new THREE.SphereGeometry(1, 64, 32));
+				this.setGeometry('Cylinder',	new THREE.CylinderGeometry(1, 1, 1, 64));
+				this.setGeometry('Circle',		new THREE.CircleGeometry(1, 64));
+				
+				this.setMaterial('MetalBlack',	new THREE.MeshStandardMaterial({color: 0x202020, emissive: 0x404040, metalness: 0.5}));
+				this.setMaterial('White',		new THREE.MeshStandardMaterial({color: 0xffffff, emissive: 0x606060, metalness: 0.2, roughness: 0.8}));
+				
+				this.setMaterial('Red',			new THREE.MeshStandardMaterial({color: 0xff6060, emissive: 0x600000, metalness: 0.5, roughness: 0.2}));
+				this.setMaterial('Green',		new THREE.MeshStandardMaterial({color: 0x60ff60, emissive: 0x006000, metalness: 0.5, roughness: 0.2}));
+				this.setMaterial('Blue',		new THREE.MeshStandardMaterial({color: 0x6060ff, emissive: 0x000060, metalness: 0.5, roughness: 0.2}));
+				this.setMaterial('Yellow',		new THREE.MeshStandardMaterial({color: 0xdddd60, emissive: 0x505000, metalness: 0.5, roughness: 0.2}));
+				this.setMaterial('Mazenta',		new THREE.MeshStandardMaterial({color: 0xdd60dd, emissive: 0x500050, metalness: 0.5, roughness: 0.2}));
+				this.setMaterial('Cyan',		new THREE.MeshStandardMaterial({color: 0x60dddd, emissive: 0x005050, metalness: 0.5, roughness: 0.2}));
+				this.setMaterial('Gray',		new THREE.MeshStandardMaterial({color: 0x666666, emissive: 0x404040, metalness: 0.2, roughness: 0.5}));
+				
+				this.setMaterial('LiteRed',		new THREE.MeshStandardMaterial({color: 0xffb0b0, emissive: 0x604040, metalness: 0.5, roughness: 0.2}));
+				this.setMaterial('LiteGreen',	new THREE.MeshStandardMaterial({color: 0xb0ffb0, emissive: 0x406040, metalness: 0.5, roughness: 0.2}));
+				this.setMaterial('LiteBlue',	new THREE.MeshStandardMaterial({color: 0xb0b0ff, emissive: 0x404060, metalness: 0.5, roughness: 0.2}));
+				this.setMaterial('LiteYellow',	new THREE.MeshStandardMaterial({color: 0xffff80, emissive: 0x505030, metalness: 0.5, roughness: 0.2}));
+				this.setMaterial('LiteMazenta',	new THREE.MeshStandardMaterial({color: 0xff80ff, emissive: 0x503050, metalness: 0.5, roughness: 0.2}));
+				this.setMaterial('LiteCyan',	new THREE.MeshStandardMaterial({color: 0x60ffff, emissive: 0x305050, metalness: 0.5, roughness: 0.2}));
+				this.setMaterial('LiteGray',	new THREE.MeshStandardMaterial({color: 0x888888, emissive: 0x606060, metalness: 0.2, roughness: 0.5}));
+
+				this.setMaterial('Ferris1',		new THREE.MeshStandardMaterial({color: 0x6a4820, emissive: 0x503010, metalness: 0, roughness: 1}));
+				this.setMaterial('Merry1',		new THREE.MeshStandardMaterial({color: 0x606040, emissive: 0x303010, metalness: 0.1, roughness: 0.5}));
+				this.setMaterial('Merry2',		new THREE.MeshStandardMaterial({color: 0x604060, emissive: 0x301030, metalness: 0.1, roughness: 0.5}));
+				this.setMaterial('Merry3',		new THREE.MeshStandardMaterial({color: 0xffffff, emissive: 0x606060, metalness: 0.1, roughness: 0.5, transparent: true, opacity: 0.5}));
+				this.setMaterial('Merry4',		new THREE.MeshStandardMaterial({color: 0x406060, emissive: 0x103030, metalness: 0.1, roughness: 0.5, transparent: true, opacity: 0.9}));
+				this.setMaterial('Coffee1', 	new THREE.MeshStandardMaterial({color: 0x808060, emissive: 0x303020, metalness: 0.1, roughness: 0.8}));
+
+			}
+			getObject() { throw new Error('getObject() must be implemented in sub-class'); }
+			getCamera() { throw new Error('getCamera() must be implemented in sub-class'); }
+			setPosition(x, y, z) {
+				const box = new THREE.Box3().setFromObject(this.getObject());
+				const size = new THREE.Vector3();
+				box.getSize(size);
+				const center = new THREE.Vector3();
+				box.getCenter(center);
+				this.getObject().position.set(x, y - center.y + size.y/2, z);
+			}
+			animate(speed = 1) { throw new Error('animate(speed) must be implemented in sub-class'); }
+		}
+
+		class FerrisWheel extends Attraction {
+			getPanel1Geometry() {
+				const key = 'FerrisWheel:Panel1';
+				if (!super.hasGeometry(key)) {
+					super.setGeometry(key, new THREE.LatheGeometry(super.getPath('M1,0.03 L0.8,0.03 L0.8,-0.03 L1,-0.03 Z').getPoints(64), 64, Math.PI*1/2, Math.PI));
+				}
+				return super.getGeometry(key);
+			}
+			getPanel2Geometry() {
+				const key = 'FerrisWheel:Panel2';
+				if (!super.hasGeometry(key)) {
+					super.setGeometry(key, new THREE.LatheGeometry(super.getPath('M1,0.03 L0,0.03 L0,-0.03 L1,-0.03 Z').getPoints(64), 64, Math.PI*3/2, Math.PI));
+				}
+				return super.getGeometry(key);
+			}
+			getFloorGeometry() {
+				const key = 'FerrisWheel:Floor';
+				if (!super.hasGeometry(key)) {
+					super.setGeometry(key, new THREE.LatheGeometry(super.getPath('M0.93,0.47 L0.87,0.47 L0.87,-0.47 L0.93,-0.47 Z').getPoints(64), 64, Math.PI*3/2, Math.PI));
+				}
+				return super.getGeometry(key);
+			}
+			getPanel(material) {
+				const mesh = new THREE.Group();
+				const cap = new THREE.Mesh(super.getGeometry('Box'), material);
+				cap.scale.set(2, 0.06, 0.01);
+				mesh.add(new THREE.Mesh(this.getPanel1Geometry(), material), new THREE.Mesh(this.getPanel2Geometry(), material), cap);
+				return mesh;
+			}
+			getFloor(material) {
+				const mesh = new THREE.Group();
+				const cap1 = new THREE.Mesh(super.getGeometry('Box'), material);
+				cap1.scale.set(0.06, 0.87, 0.01);
+				cap1.position.set(0.9, 0, 0);
+				const cap2 = new THREE.Mesh(super.getGeometry('Box'), material);
+				cap2.scale.set(0.06, 0.87, 0.01);
+				cap2.position.set(-0.9, 0, 0);
+				mesh.add(new THREE.Mesh(this.getFloorGeometry(), material), cap1, cap2);
+				return mesh;
+			}
+			getGondra(material) {
+				const frontPanel = this.getPanel(material);
+				frontPanel.position.set(0, 0.5, 0.85);
+				const rearPanel = this.getPanel(material);
+				rearPanel.position.set(0, -0.5, 0.85);
+				const floor = this.getFloor(material);
+				floor.position.set(0, 0, 0.85);
+				const mesh = new THREE.Group();
+				const pillar = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('MetalBlack'));
+				pillar.scale.set(0.06, 1.5, 0.06);
+				mesh.add(frontPanel, rearPanel, floor, pillar);
+				mesh.rotation.x = Math.PI/2;
+				return mesh;
+			}
+			getPillar(length) {
+				const mesh = new THREE.Group();
+				const edge1 = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('LiteGray'));
+				edge1.scale.set(0.15, 0.15, 0.15);
+				edge1.rotation.x = Math.PI/2;
+				mesh.add(edge1);
+				const spoke = new THREE.Mesh(super.getGeometry('Box'), super.getMaterial('LiteGray'));
+				spoke.scale.set(length, 0.3, 0.15);
+				spoke.position.x = length/2;
+				mesh.add(spoke);
+				const edge2 = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('LiteGray'));
+				edge2.scale.set(0.15, 0.15, 0.15);
+				edge2.rotation.x = Math.PI/2;
+				edge2.position.x = length;
+				mesh.add(edge2);
+				return mesh;
+			}
+			getWheel(radius, num) {
+				const mesh = new THREE.Group();
+				for (let i = 0; i < num; ++i) {
+					const theta = Math.PI*2/num;
+					const theta1 = theta*i;
+					const pillar1 = this.getPillar(radius);
+					pillar1.rotation.z = theta1;
+					pillar1.position.set(0, 0, 0.7);
+					mesh.add(pillar1);
+					const pillar2 = this.getPillar(radius);
+					pillar2.rotation.z = theta1;
+					pillar2.position.set(0, 0, -0.7);
+					mesh.add(pillar2);
+					
+					const theta2 = theta*(i+1);
+					const x = radius*Math.cos(theta2);
+					const y = radius*Math.sin(theta2);
+					const len = radius*Math.sin(theta/2)*2;
+					const theta3 = -(Math.PI - theta)/2 + theta1;
+					
+					const pillar3 = this.getPillar(len);
+					pillar3.rotation.z = theta3;
+					pillar3.position.set(x, y, 0.7);
+					mesh.add(pillar3);
+					const pillar4 = this.getPillar(len);
+					pillar4.rotation.z = theta3;
+					pillar4.position.set(x, y, -0.7);
+					mesh.add(pillar4);
+					
+					const center = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('MetalBlack'));
+					center.scale.set(0.18, 2.2, 0.18);
+					center.rotation.set(Math.PI/2, 0, 0);
+					mesh.add(center);
+				}
+				return mesh;
+			}
+			getCap() {
+				const mesh = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('Gray'));
+				mesh.scale.set(0.25, 0.25, 0.25);
+				mesh.rotation.x = Math.PI/2;
+				return mesh;
+			}
+			getPole(len) {
+				const mesh = new THREE.Group();
+				const m1 = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('Gray'));
+				m1.scale.set(0.1, len, 0.1);
+				m1.position.y -= len/2;
+				mesh.add(m1);
+				return mesh;
+			}
+			getPlatform() {
+				const mesh = new THREE.Group();
+
+				const cap1 = this.getCap();
+				cap1.position.z = 1;
+				mesh.add(cap1);
+
+				const cap2 = this.getCap();
+				cap2.position.z = -1;
+				mesh.add(cap2);
+
+				const len = (this.wheelRadius+1.8)*1.2;
+				const pillar1 = this.getPole(len);
+				pillar1.rotation.set(-0.1, 0, 0.5);
+				pillar1.position.z = 1;
+				mesh.add(pillar1);
+				
+				const pillar2 = this.getPole(len);
+				pillar2.rotation.set(-0.1, 0, -0.5);
+				pillar2.position.z = 1;
+				mesh.add(pillar2);
+
+				const pillar3 = this.getPole(len);
+				pillar3.rotation.set(0.1, 0, 0.5);
+				pillar3.position.z = -1;
+				mesh.add(pillar3);
+				
+				const pillar4 = this.getPole(len);
+				pillar4.rotation.set(0.1, 0, -0.5);
+				pillar4.position.z = -1;
+				mesh.add(pillar4);
+
+				const base = new THREE.Mesh(super.getGeometry('Box'), super.getMaterial('Ferris1'));
+				base.scale.set(len+1, 0.5, 6);
+				base.position.y = -(len-1.2);
+				mesh.add(base);
+				return mesh;
+			}
+			constructor() {
+				super();
+				this.wheelRadius = 6;
+				this.gondraNum = 12;
+				const materials = ['Red', 'Green', 'Blue', 'Yellow', 'Mazenta', 'Cyan', 'Red', 'Green', 'Blue', 'Yellow', 'Mazenta', 'Cyan'];
+				this.gondraArray = [];
+				this.ferrisWheel = new THREE.Group();
+				for (let i = 0; i < this.gondraNum; ++i) {
+					const theta = Math.PI*2/this.gondraNum;
+					const x = this.wheelRadius*Math.cos(theta*i);
+					const y = this.wheelRadius*Math.sin(theta*i);
+					
+					const gondra = this.getGondra(super.getMaterial(materials[i]));
+					gondra.position.set(x, y, 0);
+					this.gondraArray.push(gondra);
+					this.ferrisWheel.add(gondra);
+				}
+				this.camera = new THREE.PerspectiveCamera(100, getWidth()/getHeight(), 0.01, 1000);
+				this.camera.position.set(0, 1.5, 0);
+				this.camera.rotation.set(0, -Math.PI/2, Math.PI/2);
+				this.gondraArray[3].add(this.camera);
+				this.wheel = this.getWheel(this.wheelRadius, this.gondraNum);
+				this.ferrisWheel.add(this.wheel);
+				const platform = this.getPlatform();
+				this.ferrisWheel.add(platform);
+			}
+			getObject() { return this.ferrisWheel; }
+			getCamera() { return this.camera; }
+			animate(speed = 1) {
+				this.wheel.rotation.z -= speed*0.6/1000;
+				for (let i = 0; i < this.gondraNum; ++i) {
+					const theta = Math.PI*2/this.gondraNum*i + this.wheel.rotation.z;
+					this.gondraArray[i].position.set(this.wheelRadius*Math.cos(theta), this.wheelRadius*Math.sin(theta), 0);
+				}
+			}
+		}
+
+		class MerryGoRound extends Attraction {
+			getPpoiTail1Geometry() {
+				const key = 'MerryGoRound:PpoiTail';
+				if (!super.hasGeometry(key)) { super.setGeometry(key, new THREE.CylinderGeometry(0.12, 0.08, 1, 64, 1, false)); }
+				return super.getGeometry(key);
+			}
+			getBaseGeometry(radius, delta) {
+				const key = 'MerryGoRound:Base:(' + radius + ',' + delta + ')';
+				if (!super.hasGeometry(key)) {
+					const pathStr = `M${radius+delta},1 L${radius-delta},1 L${radius-delta},0 L${radius+delta},0 Z`;
+					super.setGeometry(key, new THREE.LatheGeometry(super.getPath(pathStr).getPoints(64), 64));
+				}
+				return super.getGeometry(key);
+			}
+			getPpoi(m1, m2) {
+				const ppoi = new THREE.Group();
+				const body  = new THREE.Mesh(super.getGeometry('Sphere'), m1);
+				body.scale.set(0.8, 1, 0.4); 
+				body.position.set (0.0, 0.0, 0.0);
+
+				const lEye  = new THREE.Mesh(super.getGeometry('Sphere'), m2);
+				lEye.rotation.set(-0.2, -0.3, 0);
+				lEye.scale.set(0.36, 0.45, 0.3);
+				lEye.position.set (-0.4, 0.4, 0.2);
+				const rEye  = new THREE.Mesh(super.getGeometry('Sphere'), m2);
+				rEye.rotation.set(-0.2, 0.3, 0);
+				rEye.scale.set(0.36, 0.45, 0.3); 
+				rEye.position.set (0.4, 0.4, 0.2);
+				
+				const tail  = new THREE.Mesh(this.getPpoiTail1Geometry(), super.getMaterial('MetalBlack'));
+				tail.position.set (0.0, -1.1, -0.1);
+				const tail2 = new THREE.Mesh(super.getGeometry('Sphere'), super.getMaterial('MetalBlack'));
+				tail2.position.set( 0.0, -1.6, -0.1);
+				tail2.scale.set(0.08, 0.08, 0.08);
+				ppoi.add(body, lEye, rEye, tail, tail2);
+				return ppoi;
+			}
+			getHorse(m1, m2) {
+				const horse = new THREE.Group();
+				const ppoi = this.getPpoi(m1, m2);
+				ppoi.rotation.x = -Math.PI/2;
+				horse.add(ppoi);
+
+				const pillar = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('Gray'));
+				pillar.scale.set(0.1, 3, 0.1);
+				pillar.position.y = -1.5;
+				horse.add(pillar);
+				return horse;
+			}
+			getLoopGroup(radius, dir, horseArray, material) {
+				const mesh = new THREE.Group();
+				for (let i = 0; i < horseArray.length; ++i) {
+					const theta = Math.PI*2/horseArray.length;
+					const x = radius*Math.cos(theta*i);
+					const z = radius*Math.sin(theta*i);
+					
+					horseArray[i].scale.set(0.5, 0.5, 0.5);
+					horseArray[i].rotation.y = (dir == 1)?-theta*i:(Math.PI-theta*i);
+					horseArray[i].position.set(x, 0, z);
+					mesh.add(horseArray[i]);
+				}
+				const base = new THREE.Mesh(this.getBaseGeometry(radius, 0.9), material);
+				base.position.y = -2.5;
+				mesh.add(base);
+				return mesh;
+			}
+			getRoof(roofRadius, baseRadius, material1, material2) {
+				const mesh = new THREE.Group();
+				const roof = new THREE.Mesh(super.getGeometry('Cylinder'), material1);
+				roof.scale.set(roofRadius, 0.1, roofRadius);
+				roof.position.y = 1.6;
+				mesh.add(roof);
+				const base = new THREE.Mesh(super.getGeometry('Cylinder'), material2);
+				base.scale.set(baseRadius, 5, baseRadius);
+				base.position.y = 0.5;
+				mesh.add(base);
+				return mesh;
+			}
+			constructor() {
+				super();
+				this.merryGoRound = new THREE.Group();
+				this.merryGoRound.add(this.getRoof(5, 0.9, super.getMaterial('Merry3'), super.getMaterial('Merry4')));
+				const ppoi = this.getPpoi(super.getMaterial('Yellow'), super.getMaterial('Cyan'));
+				ppoi.scale.set(2.5, 2.5, 2.5);
+				ppoi.rotation.set(-Math.PI/2, 0, Math.PI/2);
+				ppoi.position.y = 3;
+				this.merryGoRound.add(ppoi);
+				this.innerHorseArray = [];
+				[
+					['LiteRed', 'Red'], ['LiteGreen', 'Green'], ['LiteBlue', 'Blue'], ['LiteYellow', 'Yellow'], ['LiteMazenta', 'Mazenta'], ['LiteCyan', 'Cyan']
+				].forEach((materials) => { this.innerHorseArray.push(this.getHorse(super.getMaterial(materials[0]), super.getMaterial(materials[1]))); });
+				this.inner = this.getLoopGroup(1.9, 1, this.innerHorseArray, super.getMaterial('Merry1'));
+				this.merryGoRound.add(this.inner);
+				this.outerHorseArray = [];
+				[
+					['LiteRed', 'Red'], ['LiteGreen', 'Green'], ['LiteBlue', 'Blue'], ['LiteYellow', 'Yellow'], ['LiteMazenta', 'Mazenta'], ['LiteCyan', 'Cyan'],
+					['LiteRed', 'Red'], ['LiteGreen', 'Green'], ['LiteBlue', 'Blue'], ['LiteYellow', 'Yellow'], ['LiteMazenta', 'Mazenta'], ['LiteCyan', 'Cyan']
+				].forEach((materials) => { this.outerHorseArray.push(this.getHorse(super.getMaterial(materials[0]), super.getMaterial(materials[1]))); });
+				this.outer = this.getLoopGroup(3.8, -1, this.outerHorseArray, super.getMaterial('Merry2'));
+				this.merryGoRound.add(this.outer);
+				this.camera = new THREE.PerspectiveCamera(60, getWidth()/getHeight(), 0.01, 1000);
+				this.camera.position.set(0, 0.7, -0.2);
+				this.outerHorseArray[0].add(this.camera);
+			}
+			getObject() { return this.merryGoRound; }
+			getCamera() { return this.camera; }
+			animate(speed = 1) {
+				this.inner.rotation.y += speed*2.5/1000;
+				this.outer.rotation.y -= speed*2/1000;
+				this.innerHorseArray.forEach((horse) => { horse.position.y = Math.sin(horse.rotation.y*2+this.inner.rotation.y*6)/2.3-0.5; });
+				this.outerHorseArray.forEach((horse) => { horse.position.y = Math.sin(horse.rotation.y*2+this.outer.rotation.y*6)/2.3-0.5; });
+			}
+		}
+
+		class CoffeeCup extends Attraction {
+			getCupGeometry() {
+				const key = 'CoffeeCup:Cup';
+				if (!super.hasGeometry(key)) {
+					super.setGeometry(key, new THREE.LatheGeometry(super.getPath('M8,9 C8,6 8,4 6,4 L4,4 L4,1 L0,1 L0,0 L3,0 C6,0 9,3 9,9 C9,10 8,10 8,9 Z').getPoints(64), 64));
+				}
+				return super.getGeometry(key);
+			}
+			getHandleGeometry() {
+				const key = 'CoffeeCup:Handle';
+				if (!super.hasGeometry(key)) {
+					const curve = new THREE.CubicBezierCurve3(new THREE.Vector3(8.5, 8, 0), new THREE.Vector3(14, 10, 0), new THREE.Vector3(11, 0, 0), new THREE.Vector3(5, 3, 0));
+					super.setGeometry(key, new THREE.TubeGeometry(curve, 100, 0.5, 64, false));
+				}
+				return super.getGeometry(key);
+			}
+			getCup(material) {
+				const mesh = new THREE.Group();
+				mesh.add(new THREE.Mesh(this.getCupGeometry(), material));
+				const handle = new THREE.Mesh(this.getHandleGeometry(), material);
+				handle.scale.set(1, 1, 3);
+				mesh.add(handle);
+				const pillar = new THREE.Group();
+				const center = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('Gray'));
+				center.scale.set(0.8, 7, 0.8);
+				center.position.y += 3.5;
+				pillar.add(center);
+				const table = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('White'));
+				table.scale.set(3.2, 0.2, 3.2);
+				table.position.y += 7;
+				pillar.add(table);
+				mesh.add(pillar);
+				return mesh;
+			}
+			getInnerBase(cupMaterial, material) {
+				const mesh = new THREE.Group();
+				const base = new THREE.Mesh(super.getGeometry('Cylinder'), material);
+				base.scale.set(3, 0.6, 3);
+				mesh.add(base);
+				const theta = Math.PI*2/cupMaterial.length;
+				for (let i = 0; i < cupMaterial.length; ++i) {
+					const x = 2*Math.sin(theta*i);
+					const z = 2*Math.cos(theta*i);
+					const cup = this.getCup(cupMaterial[i]);
+					cup.scale.set(0.1, 0.1, 0.1);
+					cup.rotation.y = Math.PI*2*Math.random();
+					cup.position.set(x, 0.3, z);
+					this.cupArray.push(cup);
+					mesh.add(cup);
+				}
+				return mesh;
+			}
+			getBase() {
+				const mesh = new THREE.Group();
+				const base = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('Coffee1'));
+				base.scale.set(7.5, 0.5, 7.5);
+				mesh.add(base);
+
+				const materials = ['Red', 'Green', 'Blue', 'Yellow', 'Mazenta', 'Cyan', 'Red', 'Green', 'Blue', 'Yellow', 'Mazenta', 'Cyan'];
+				const innerBaseMaterials = ['LiteRed', 'LiteGreen', 'LiteBlue'];
+				const theta = Math.PI*2/3;
+				for (let i = 0; i < 3; ++i) {
+					const x = 4*Math.sin(theta*i);
+					const z = 4*Math.cos(theta*i);
+					const cupMaterial = [];
+					for (let j = 0; j < 4; ++j) { cupMaterial.push(super.getMaterial(materials[i*4+j])); }
+					const innerBase = this.getInnerBase(cupMaterial, super.getMaterial(innerBaseMaterials[i]));
+					innerBase.position.set(x, 0.05, z);
+					this.innerBaseArray.push(innerBase);
+					mesh.add(innerBase);
+				}
+				mesh.scale.set(0.8, 0.8, 0.8);
+				return mesh;
+			}
+			constructor() {
+				super();
+				this.cupArray = [];
+				this.innerBaseArray = [];
+				this.coffeeCup = new THREE.Group();
+				this.base = this.getBase();
+				this.coffeeCup.add(this.base);
+				this.camera = new THREE.PerspectiveCamera(75, getWidth()/getHeight(), 0.01, 1000);
+				this.camera.position.set(0,12,0);
+				this.camera.rotation.set(0.3,0,0);
+				this.cupArray[0].add(this.camera);
+			}
+			getObject() { return this.coffeeCup; }
+			getCamera() { return this.camera; }
+			animate(speed) {
+				this.cupArray.forEach((cup) => { cup.rotation.y += speed*15/1000; });
+				this.innerBaseArray.forEach((base) => { base.rotation.y -= speed*6/1000; });
+				this.base.rotation.y += speed*3/1000;
+			}
+		}
+
+		class SnowDome extends Attraction {
+			static G = 0.0002;
+			static R = 10;
+			static H = 4;
+			static D = 0.3;
+			getDome() {
+				const dome = new THREE.Group();
+				const THETA = Math.acos(SnowDome.H/SnowDome.R);
+				const innerMaterial = new THREE.MeshStandardMaterial({color: 0xffffff, transparent: true, opacity: 0.3});
+				innerMaterial.depthWrite = false;
+				innerMaterial.renderOrder = 1;
+				const outerMaterial = new THREE.MeshStandardMaterial({color: 0xffffff, transparent: true, opacity: 0.3});
+				outerMaterial.depthWrite = false;
+				outerMaterial.renderOrder = 2;
+				dome.add(new THREE.Mesh(new THREE.SphereGeometry(SnowDome.R-SnowDome.D, 64, 64), innerMaterial));
+				dome.add(new THREE.Mesh(new THREE.SphereGeometry(SnowDome.R,            64, 64), outerMaterial));
+				const domeFloor = new THREE.Mesh(new THREE.RingGeometry(0, SnowDome.R*Math.sin(THETA)-SnowDome.D-0.2, 64), new THREE.MeshStandardMaterial({color: 0x404040}));
+				domeFloor.rotation.x = -Math.PI/2;
+				domeFloor.position.y = -SnowDome.H;
+				dome.add(domeFloor);
+				dome.add(new THREE.Mesh(new THREE.SphereGeometry(SnowDome.R-SnowDome.D-0.1, 64, 64, 0, Math.PI*2, Math.PI-THETA, THETA), new THREE.MeshStandardMaterial({color: 0x404040})));
+				return dome;
+			}
+			getSnowGeometry() {
+				if (this.snowGeometry != null) { this.snowGeometry.dispose(); }
+				const pos = [];
+				for (let i = 0; i < this.snowInfos.length; ++i) {
+					let [x, y, z, vx, vy, vz] = this.snowInfos[i];
+					pos.push(x, y, z);
+				}
+				this.snowGeometry = new THREE.BufferGeometry();
+				this.snowGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+				return this.snowGeometry;
+			}
+			getSnowInfoInit() {
+				let [x, y, z] = [2*SnowDome.R*(Math.random()-0.5), (SnowDome.R+SnowDome.H)*(Math.random()-0.5)+SnowDome.H, 2*SnowDome.R*(Math.random()-0.5)];
+				while (Math.sqrt(x**2+y**2+z**2) > SnowDome.R-SnowDome.D) {
+					[x, y, z] = [2*SnowDome.R*(Math.random()-0.5), (SnowDome.R+SnowDome.H)*(Math.random()-0.5)+SnowDome.H, 2*SnowDome.R*(Math.random()-0.5)];
+				}
+				return [x, y, z, 0, 0, 0];
+			}
+			getSnowInfo() {
+				const theta = Math.random()*Math.PI*2;
+				return [0, -SnowDome.H, 0, Math.sin(theta)*Math.random()*0.01, Math.random()*0.03+0.06, Math.cos(theta)*Math.random()*0.01];
+			}
+			constructor() {
+				super();
+				this.snowInfos = [];
+				for (let i = 0; i < 500; ++i) { this.snowInfos.push(this.getSnowInfoInit()); }
+				this.dome = new THREE.Group();
+				this.dome.add(this.getDome());
+				this.snowGeometry = null;
+				this.snow = new THREE.Points(this.getSnowGeometry(), new THREE.PointsMaterial({size: 0.001, color: 0xc0c0ff}));
+				this.dome.add(this.snow);
+			}
+			getObject() { return this.dome; }
+			animate(speed) {
+				for (let i = 0; i < this.snowInfos.length; ++i) {
+					let [x, y, z, vx, vy, vz] = this.snowInfos[i];
+					vy = Math.max(vy-SnowDome.G, -SnowDome.G*20);
+					x += vx;
+					y += vy;
+					z += vz;
+					const d = Math.sqrt(x**2+y**2+z**2);
+					if (y < -SnowDome.H) { [x, y, z, vx, vy, vz] = this.getSnowInfo(); }
+					else if (d > SnowDome.R-SnowDome.D) {
+						const norm = (SnowDome.R-SnowDome.D)/d;
+						vy = Math.min(0, vy);
+						x *= norm;
+						y *= norm;
+						z *= norm;
+					}
+					this.snowInfos[i] = [x, y, z, vx, vy, vz];
+				}
+				this.snow.geometry = this.getSnowGeometry();
+			}
+		}
+
+		const canvas = document.querySelector('#canvas');
+		function getWidth()  { return canvas.getBoundingClientRect().width; }
+		function getHeight() { return canvas.getBoundingClientRect().height; }
+
+		const scene = new THREE.Scene();
+		const directionLight = new THREE.DirectionalLight(0xffff80, 3);
+		directionLight.position.set(1, 1, 1);
+		scene.add(directionLight);
+		const ambientLight = new THREE.AmbientLight(0x999999, 1.5);
+		scene.add(ambientLight);
+		
+		const snowDome = new SnowDome();
+		const ferrisWheel = new FerrisWheel();
+		ferrisWheel.getObject().scale.set(0.6, 0.6, 0.6);
+		ferrisWheel.getObject().rotation.y = 0.8;
+		ferrisWheel.setPosition(-4.2, -4, -2.2);
+		const merryGoRound = new MerryGoRound();
+		merryGoRound.getObject().scale.set(0.6, 0.6, 0.6);
+		merryGoRound.setPosition(3.8, -4, -2);
+		const coffeeCup = new CoffeeCup();
+		coffeeCup.getObject().scale.set(0.5, 0.5, 0.5);
+		coffeeCup.getObject().rotation.y = 1;
+		coffeeCup.setPosition(0, -4, 4.2);
+		const actors = [ferrisWheel, merryGoRound, coffeeCup, snowDome];
+		const all = new THREE.Group();
+		actors.forEach((actor) => all.add(actor.getObject()));
+		all.scale.set(0.05,0.05,0.05);
+		all.position.set(0,1,-1);
+		scene.add(all);
+		
+		const camera = new THREE.PerspectiveCamera(70, getWidth()/getHeight(), 0.001, 1000);
+//		camera.position.set(0, 0, 0);
+		const renderer = new THREE.WebGLRenderer();
+		renderer.setSize(getWidth(), getHeight());
+		renderer.setClearColor(0x8080e0);
+		renderer.render(scene, camera);
+
+		renderer.xr.enabled = true;
+		canvas.appendChild(renderer.domElement);
+		canvas.appendChild(VRButton.createButton(renderer));
+		
+		function animate() {
+			renderer.setSize(getWidth(), getHeight());
+			renderer.render(scene, camera);
+			actors.forEach((actor) => actor.animate(2));
+		}
+
+		renderer.setAnimationLoop(animate);
+		</script>
+	</body>
+</html>

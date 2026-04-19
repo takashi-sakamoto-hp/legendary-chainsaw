@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta name="Author" content="Sakamoto Takashi">
+		<title>SignPole</title>
+	</head>
+	<body>
+		<div id="canvas" style="width: 98vw; height: 97vh;">
+		</div>
+		<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+		<script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+		<script>
+class SignPoleGeometry extends THREE.BufferGeometry {
+	constructor(radius = 1, height = 1, radialSegments = 32, heightSegments = 1) {
+		super();
+		this.type = 'SignPoleGeometry';
+		this.parameters = {radius: radius, height: height, radialSegments: radialSegments, heightSegments: heightSegments};
+
+		const scope = this;
+		radialSegments = Math.floor(radialSegments);
+		heightSegments = Math.floor(heightSegments);
+		const indices = [];
+		const vertices = [];
+		const normals = [];
+		const uvs = [];
+		let index = 0;
+		const indexArray = [];
+		const halfHeight = height/2;
+		let groupStart = 0;
+		generateTorso();
+
+		this.setIndex(indices);
+		this.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+		this.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+		this.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+		function generateTorso() {
+			const normal = new THREE.Vector3();
+			const vertex = new THREE.Vector3();
+			let groupCount = 0;
+			for (let y = 0; y <= heightSegments; y++) {
+				const indexRow = [];
+				const v = y/heightSegments;
+				for (let x = 0; x <= radialSegments; x++) {
+					const offsetY = (x - radialSegments/2)/radialSegments*4;
+					const u = x/radialSegments;
+					const theta = u*Math.PI*2;
+					const sinTheta = Math.sin(theta);
+					const cosTheta = Math.cos(theta);
+					vertex.x = radius*sinTheta;
+					vertex.y = -v*height + halfHeight;
+					vertex.z = radius*cosTheta;
+					vertices.push(vertex.x, vertex.y+offsetY, vertex.z);
+					normal.set(sinTheta, 0, cosTheta).normalize();
+					normals.push(normal.x, normal.y, normal.z);
+					uvs.push(u, 1-v);
+					indexRow.push(index++);
+				}
+				indexArray.push(indexRow);
+			}
+
+			for (let x = 0; x < radialSegments; x++) {
+				for (let y = 0; y < heightSegments; y++) {
+					const a = indexArray[y][x];
+					const b = indexArray[y+1][x];
+					const c = indexArray[y+1][x+1];
+					const d = indexArray[y][x+1];
+					if (radius > 0 || y !== 0)					{ indices.push(a, b, d); groupCount += 3; }
+					if (radius > 0 || y !== heightSegments-1)	{ indices.push(b, c, d); groupCount += 3; }
+				}
+			}
+			scope.addGroup(groupStart, groupCount, 0);
+			groupStart += groupCount;
+		}
+	}
+	copy(source) {
+		super.copy(source);
+		this.parameters = Object.assign({}, source.parameters);
+		return this;
+	}
+	static fromJSON(data) { return new SignPoleGeometry(data.radius, data.height, data.radialSegments, data.heightSegments); }
+}
+		</script>
+		<script>
+			const canvas = document.querySelector('#canvas');
+			function getWidth()  { return canvas.getBoundingClientRect().width; }
+			function getHeight() { return canvas.getBoundingClientRect().height; }
+
+			const scene = new THREE.Scene();
+			const directionLight = new THREE.DirectionalLight(0xffffff, 1);
+			directionLight.position.set(1, 1, 1);
+			directionLight.target.position.set(0, 0, 0);
+			scene.add(directionLight);
+			scene.add(new THREE.AmbientLight(0x999999, 2));
+			
+			const radius = 0.5;
+			const height = 1;
+			const radialSegments = 32;
+
+			const signpoleGeometry		= new SignPoleGeometry(radius, height, radialSegments);
+			const signpoleFrameGeometry = new THREE.CylinderGeometry(radius*1.5, radius*1.5, height*1.5, radialSegments);
+			const signPoleCoverGeometry = new THREE.CylinderGeometry(radius*1.3, radius*1.3, height*7, radialSegments);
+			
+			const signPoleRedMaterial	= new THREE.MeshStandardMaterial({color: 0xff0000, metalness: 0.5});
+			const signPoleBlueMaterial	= new THREE.MeshStandardMaterial({color: 0x0000ff, metalness: 0.5});
+			const signPoleWhiteMaterial	= new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 0.5});
+			const signPoleBlackMaterial	= new THREE.MeshStandardMaterial({color: 0x222222, metalness: 0.8});
+			const signPoleCoverMaterial	= new THREE.MeshStandardMaterial({color: 0xd0d0ff, metalness: 0.6, roughness: 0.3, transparent: true, opacity: 0.5});
+			
+			function createSignPoleBody() {
+				const redMesh = new THREE.Mesh(signpoleGeometry, signPoleRedMaterial);
+				const whiteMesh1 = new THREE.Mesh(signpoleGeometry, signPoleWhiteMaterial);
+				whiteMesh1.rotation.y = -Math.PI*1/2;
+				const blueMesh = new THREE.Mesh(signpoleGeometry, signPoleBlueMaterial);
+				blueMesh.rotation.y = -Math.PI;
+				const whiteMesh2 = new THREE.Mesh(signpoleGeometry, signPoleWhiteMaterial);
+				whiteMesh2.rotation.y = -Math.PI*3/2;
+				const mesh = new THREE.Group();
+				mesh.add(redMesh, whiteMesh1, blueMesh, whiteMesh2);
+				return mesh;
+			}
+			
+			const signpoleBody1 = createSignPoleBody();
+			signpoleBody1.position.y -= height*2;
+			const signpoleBody2 = createSignPoleBody();
+			signpoleBody2.position.y += height*2;
+			const signpoleCover = new THREE.Mesh(signPoleCoverGeometry, signPoleCoverMaterial);
+			const signpoleTop = new THREE.Mesh(signpoleFrameGeometry, signPoleBlackMaterial);
+			signpoleTop.position.y += height*4;
+			const signpoleBottom = new THREE.Mesh(signpoleFrameGeometry, signPoleBlackMaterial);
+			signpoleBottom.position.y -= height*4;
+			const mesh = new THREE.Group();
+			mesh.add(signpoleBody1, signpoleBody2, signpoleCover, signpoleTop, signpoleBottom);
+			
+			scene.add(mesh);
+
+			const camera = new THREE.PerspectiveCamera(75, getWidth()/getHeight(), 0.1, 50);
+			camera.position.set(0, 0, 10);
+			camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+			const renderer = new THREE.WebGLRenderer();
+			renderer.setSize(getWidth(), getHeight());
+			renderer.setClearColor(0x808080);
+			renderer.render(scene, camera);
+			
+			while (canvas.firstChild) { canvas.removeChild(canvas.firstChild); }
+			canvas.appendChild(renderer.domElement);
+			
+			const controls = new THREE.OrbitControls(camera, renderer.domElement);
+			Object.assign(controls, {rotateSpeed: 0.5, enableDamping: true, dampingFactor: 0.05});
+
+			function animate() {
+				renderer.render(scene, camera);
+				signpoleBody1.rotation.y -= 0.05;
+				signpoleBody2.rotation.y -= 0.05;
+				requestAnimationFrame(animate);
+			}
+
+			animate();
+		</script>
+	</body>
+</html>

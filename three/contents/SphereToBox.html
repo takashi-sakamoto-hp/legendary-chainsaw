@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta name="Author" content="Sakamoto Takashi">
+		<title>Sphere to Box</title>
+		<style>
+		body		{ font-size: 120%; }
+		#control	{ position: absolute; top: 5px; left: 5px; z-index: 1; }
+		#canvas		{ position: absolute; top: 0px; left: 0px; z-index: 0; }
+		</style>
+	</head>
+	<body>
+		<div id="control">
+		</div> 
+		<div id="canvas" style="width: 100%; height: 100%;"></div>
+		<script type="importmap">
+		{
+		  "imports": {
+			"three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+			"three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+		  }
+		}
+		</script>
+		<script type="module">
+		import * as THREE from 'three';
+		import { VRButton } from 'https://unpkg.com/three@0.164.0/examples/jsm/webxr/VRButton.js';
+		import { XRControllerModelFactory } from 'https://unpkg.com/three@0.164.0/examples/jsm/webxr/XRControllerModelFactory.js';
+		import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+		class Morpher {
+			#originalGeometry;
+			#index;
+			#fromGeometry;
+			#geometry;
+			#list = [];
+			constructor(geometry) {
+				this.#originalGeometry = geometry.clone();
+				this.#geometry = geometry.clone();
+				this.#index = 0;
+				this.#fromGeometry = geometry.clone();
+				this.#list = [];
+			}
+			addPosition(referencePosition) {
+				const geometry = this.#originalGeometry.clone();
+				const position = geometry.attributes.position;
+				if (referencePosition != null) {
+					const arr = position.array;
+					for (let i = 0; i < arr.length; i += 3) {
+						let [x,y,z] = [arr[i], arr[i+1], arr[i+2]];
+						let index = -1;
+						let d = 9999;
+						for (let j = 0; j < referencePosition.length; j += 3) {
+							let [x2,y2,z2] = [referencePosition[j], referencePosition[j+1], referencePosition[j+2]];
+							let d2 = (x2-x)**2 + (y2-y)**2 + (z2-z)**2;
+							if (d2 < d) { index = j; d = d2; }
+						}
+						if (index < 0) { throw new Error('Internal error'); }
+						[arr[i], arr[i+1], arr[i+2]] = [referencePosition[index], referencePosition[index+1], referencePosition[index+2]]
+					}
+				}
+				this.#list.push(Array.from(position.array));
+			}
+			#morph1(index, delta) {
+				this.#geometry = this.#fromGeometry.clone();
+				const pos1 = this.#geometry.attributes.position;
+				const arr1 = pos1.array;
+				const arr2 = this.#list[index];
+				for (let i = 0; i < arr1.length; i += 3) {
+					let [x1,y1,z1] = [arr1[i], arr1[i+1], arr1[i+2]];
+					let [x2,y2,z2] = [arr2[i], arr2[i+1], arr2[i+2]];
+					[arr1[i], arr1[i+1], arr1[i+2]] = [x1+(x2-x1)*delta, y1+(y2-y1)*delta, z1+(z2-z1)*delta]
+				}
+				pos1.needsUpdate = true;
+				this.#geometry.computeVertexNormals();
+			}
+			morph(delta) {
+				const index = Math.min(Math.trunc(delta*this.#list.length), this.#list.length-1);
+				if (index > this.#index) { this.#index = index; this.#fromGeometry = this.#geometry.clone(); }
+				this.#morph1(index, Math.min(delta*this.#list.length - index, 1));
+			}
+			getGeometry() { return this.#geometry; }
+		}
+		
+		const canvas = document.querySelector('#canvas');
+		function getWidth()  { return canvas.getBoundingClientRect().width; }
+		function getHeight() { return canvas.getBoundingClientRect().height; }
+		const scene = new THREE.Scene();
+		const directionLight = new THREE.DirectionalLight(0xffffff, 1);
+		directionLight.position.set(1, 1, 1);
+		directionLight.target.position.set(0, 0, 0);
+		scene.add(directionLight);
+		scene.add(new THREE.AmbientLight(0x999999, 1));
+		
+		const geometry = new THREE.SphereGeometry(1, 64, 32);
+		const morpher = new Morpher(geometry);
+		const p1 = [ 1, 1, 1,   1, 1, -1,   1, -1, 1,   1, -1, -1,   -1, 1, -1,   -1, 1, 1,   -1, -1, -1,   -1, -1, 1];
+		morpher.addPosition(p1.map(v => v*0.75));
+		const p2 = [ 0, 1, 0,   -1, -1, -1,  -1, -1, 1,   1, -1, -1,   1, -1, 1 ]
+		morpher.addPosition(p2.map(v => v*0.75));
+		morpher.addPosition(null);
+		const material = new THREE.MeshStandardMaterial({color: 0xffff00, metalness: 0.5, roughness: 0.5});
+		const mesh = new THREE.Mesh(geometry, material);
+		scene.add(mesh);
+		const renderer = new THREE.WebGLRenderer();
+		renderer.setSize(getWidth(), getHeight());
+		renderer.setClearColor(0xdddddd);
+		canvas.appendChild(renderer.domElement);
+		const camera = new THREE.PerspectiveCamera(60, getWidth()/getHeight(), 0.1, 1000);
+		camera.position.set(0, 0, 3);
+		const controls = new OrbitControls(camera, renderer.domElement);
+		Object.assign(controls, {rotateSpeed: 0.5, enableDamping: true, dampingFactor: 0.05});
+		controls.target = new THREE.Vector3(0, 0, 0);
+		let count = 0;
+		const period = 500;
+		function animate() {
+			renderer.render(scene, camera);
+			renderer.setSize(getWidth(), getHeight());
+			requestAnimationFrame(animate);
+			controls.update();
+			if (count > period) { return; }
+			morpher.morph(count/period);
+			mesh.geometry = morpher.getGeometry();
+			++count;
+		}
+		animate();
+		</script>
+	</body>
+</html>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title></title>
+		<style>body { margin: 0; }</style>
+	</head>
+	<body>
+		<h1><hr></h1>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/109/three.min.js"></script>
+		<script>
+			const [WSEG, HSEG] = [64, 32];
+			const sphereGeometry = new THREE.SphereGeometry(1, WSEG, HSEG);
+			const cylinderGeometry = new THREE.CylinderGeometry(1.2, 0.8, 10.0, WSEG, 1, false); 
+			const renderer = new THREE.WebGLRenderer();
+			const scene = new THREE.Scene();
+			const camera = createCamera();
+			let dragging = false;
+			let mousePos = [0, 0];
+			const materialMap = new Map();
+			const object = createPpoi();
+			function createMaterial(color) {
+				let material = materialMap.get(color);
+				if (material == null) {
+					material = new THREE.MeshStandardMaterial({color: color});
+					materialMap.set(color, material);
+				}
+				return material;
+			}
+			function createPpoi() {
+				const ppoi = new THREE.Group();
+				const body  = new THREE.Mesh(sphereGeometry, createMaterial(0x9696c8));
+				body.scale.set(8, 10, 4); 
+				body.position.set ( 0.0,   0.0,  0.0);
+				const lEye  = new THREE.Mesh(sphereGeometry, createMaterial(0x646496));
+				lEye.rotation.set(-0.2, -0.3, 0);
+				lEye.scale.set(3.6, 4.5, 1.8);
+				lEye.position.set (-4.0,   4.0,  2.0);
+				const rEye  = new THREE.Mesh(sphereGeometry, createMaterial(0x646496));
+				rEye.rotation.set(-0.2, 0.3, 0);
+				rEye.scale.set(3.6, 4.5, 1.8); 
+				rEye.position.set ( 4.0,   4.0,  2.0);
+				const tail  = new THREE.Mesh(cylinderGeometry, createMaterial(0x303030));
+				tail.position.set ( 0.0, -11.0, -1.0);
+				const tail2 = new THREE.Mesh(sphereGeometry, createMaterial(0x303030));
+				tail2.scale.set(0.8, 0.8, 0.8);
+				tail2.position.set( 0.0, -16.0, -1.0);
+				ppoi.add(body, lEye, rEye, tail, tail2);
+				return ppoi;
+			}
+			function createLight() {
+				const light = new THREE.DirectionalLight(0xffffff, 2);
+				light.position.set(1, 1, 1);
+				return light;
+			}
+			function createAmbientLight() { return new THREE.AmbientLight(0x999999, 2.0); }
+			function getWidth() { return window.innerWidth; }
+			function getHeight() { return window.innerHeight; }
+			function createCamera() {
+				const camera = new THREE.PerspectiveCamera(75, getWidth() / getHeight(), 1, 1000);
+				camera.position.set(0, 0, 100);
+				camera.lookAt(new THREE.Vector3(0, 0, 0));
+				return camera;
+			}
+			function animate() {
+				renderer.render(scene, camera);
+				requestAnimationFrame(animate);
+			}
+			function main() {
+				renderer.setSize(getWidth(), getHeight());
+				renderer.setClearColor(0x000000);
+				document.body.appendChild(renderer.domElement);
+				
+				scene.add(createLight());
+				scene.add(createAmbientLight());
+				scene.add(object);
+				renderer.render(scene, camera);
+
+				window.addEventListener('resize', () => {
+					renderer.setSize(getWidth(), getHeight());
+					camera.aspect = getWidth() / getHeight();
+					camera.updateProjectionMatrix();
+				});
+				document.addEventListener('mousedown', (event) => {
+					dragging = true;
+					mousePos = [event.pageX, event.pageY];
+				});
+				document.addEventListener('mouseup',   (event) => {
+					dragging = false;
+				});
+				document.addEventListener('mousemove', (event) => {
+					if (!dragging) { return; }
+					object.rotation.x += Math.PI*(event.pageY - mousePos[1])/1000;
+					object.rotation.y += Math.PI*(event.pageX - mousePos[0])/1000;
+					mousePos = [event.pageX, event.pageY];
+				});
+				document.addEventListener('wheel', (event) => {
+					object.rotation.z += Math.PI*event.deltaY/10000;
+				});
+				animate();
+			}
+			main();
+		</script>
+	</body>
+</html>

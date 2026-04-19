@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta name="Author" content="Sakamoto Takashi">
+		<meta name="google" content="notranslate">
+		<title>Explosion ver.2</title>
+		<style>
+			#control { position: absolute; top: 5px; left: 5px; z-index: 1; display: none; }
+			#canvas	 { position: absolute; top: 0px; left: 0px; z-index: 0; }
+			button { margin-right: 5px; padding: 0px 3px 0px 3px; }
+			input { margin-right: 20px; }
+			#control .icon { color: lightgray; }
+			#control.running .icon { color: black; }
+		</style>
+	</head>
+	<body>
+		<svg aria-hidden="true"><defs>
+			<symbol id="svgPlay"   viewBox="0 0 100 100" fill="black"       ><polygon points="20,27 20,87 80,57"/></symbol>
+			<symbol id="svgPause"  viewBox="0 0 100 100" fill="currentColor"><rect x="20" y="27" width="22" height="60"/><rect x="60" y="27" width="22" height="60"/></symbol>
+			<symbol id="svgRewind" viewBox="0 0 100 100" fill="currentColor"><polygon points="80,27 80,87 20,57"/></symbol>
+			<symbol id="svgRec"    viewBox="0 0 100 100" fill="red"         ><circle cx="50" cy="57" r="40"/><text x="18" y="75" font-size="50" fill="white">16</text></symbol>
+		</defs></svg>
+		<div id="control">
+			<button id="rewind"	 ><svg width="20" height="20" class="icon"><use href="#svgRewind"/></svg></button>
+			<button id="pause"   ><svg width="20" height="20" class="icon"><use href="#svgPause" /></svg></button>
+			<button id="play"    ><svg width="20" height="20" class="icon"><use href="#svgPlay"  /></svg></button>
+			<button id="rec"     ><svg width="20" height="20" class="icon"><use href="#svgRec"   /></button>
+			<span style="display: inline-block; width: 20px;"></span>
+			<label for="s"       >速度</label>	<input type="range" id="s" name="s"               min="1"	max="20" value="10">
+			<label for="v"       >威力</label>	<input type="range" id="v" name="v"	class="reset" min="1"	max="20" value="10">
+			<label for="r"       >回転</label>	<input type="range" id="r" name="r"	class="reset" min="1"	max="20" value="10">
+			<label for="g"       >重力</label>	<input type="range" id="g" name="g"	class="reset" min="1"	max="20" value="10">
+		</div>
+		<div id="canvas" style="width: 100%; height: 100%;">
+		</div>
+		<script type="importmap">
+			{
+			  "imports": {
+				"three": "https://unpkg.com/three@0.164.0/build/three.module.js"
+			  }
+			}
+		</script>
+		<script type="module">
+			import * as THREE from 'three';
+			import { VRButton } from 'https://unpkg.com/three@0.164.0/examples/jsm/webxr/VRButton.js';
+			import { XRControllerModelFactory } from 'https://unpkg.com/three@0.164.0/examples/jsm/webxr/XRControllerModelFactory.js';
+
+			const [WSEG, HSEG] = [64, 32];
+			const SPHERE_GEOMETRY = new THREE.SphereGeometry(1, WSEG, HSEG);
+			const CYLINDER_GEOMETRY = new THREE.CylinderGeometry(1.2, 0.8, 10.0, WSEG, 1, false); 
+			const TNT_PART	= new THREE.BoxGeometry(1, 1, 1);
+			let TNT_MAT, TNT_DIM;
+			{
+			TNT_MAT	=	[
+									new THREE.MeshStandardMaterial({color: 0xff0000, metalness: 0.3, roughness: 0.3}),
+									new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 0.3, roughness: 0.3}),
+									new THREE.MeshStandardMaterial({color: 0x000000, metalness: 0.3, roughness: 0.3}),
+									new THREE.MeshStandardMaterial({color: 0x00ff00, metalness: 0.3, roughness: 0.3}),
+									new THREE.MeshStandardMaterial({color: 0x0000ff, metalness: 0.3, roughness: 0.3}),
+									new THREE.MeshStandardMaterial({color: 0xffff00, metalness: 0.3, roughness: 0.3}),
+									new THREE.MeshStandardMaterial({color: 0xff00ff, metalness: 0.3, roughness: 0.3}),
+									new THREE.MeshStandardMaterial({color: 0x00ffff, metalness: 0.3, roughness: 0.3})
+								];
+			}
+			{
+			TNT_DIM = [
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									
+									[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+									[1,1,2,2,2,1,2,1,1,2,1,2,2,2,1,1],
+									[1,1,1,2,1,1,2,2,1,2,1,1,2,1,1,1],
+									[1,1,1,2,1,1,2,1,2,2,1,1,2,1,1,1],
+									[1,1,1,2,1,1,2,1,1,2,1,1,2,1,1,1],
+									[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+									
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[2,9,9,9,9,9,9,9,9,9,9,9,9,9,9,2],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									[1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,1],
+									
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,9,9,9,9,9,9,9,9,9,9,9,9,9,9,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								],
+								[
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									
+									[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+									[1,1,2,2,2,1,2,1,1,2,1,2,2,2,1,1],
+									[1,1,1,2,1,1,2,1,2,2,1,1,2,1,1,1],
+									[1,1,1,2,1,1,2,2,1,2,1,1,2,1,1,1],
+									[1,1,1,2,1,1,2,1,1,2,1,1,2,1,1,1],
+									[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+									
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+									[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+								]
+							];
+			}
+			const canvas	= document.querySelector('#canvas');
+			const control	= document.querySelector('#control');
+			function getWidth()  { return canvas.getBoundingClientRect().width; }
+			function getHeight() { return canvas.getBoundingClientRect().height; }
+			const NUM = 16;
+			
+			const scene = new THREE.Scene();
+			const directionLight = new THREE.DirectionalLight(0xffffff, 3);
+			directionLight.position.set(1, 1, 1);
+			directionLight.target.position.set(0, 0, 0);
+			scene.add(directionLight);
+			scene.add(new THREE.AmbientLight(0x999999, 3));
+			
+			let G = 0;
+			function createTNT() {
+				const tnt = new THREE.Group();
+				tnt.userData.id = 'TNT';
+				const params = [];
+				for (let i = 0; i < NUM; ++i) {
+					const x = i-(NUM-1)/2;
+					for (let j = 0; j < NUM; ++j) {
+						const y = j-(NUM-1)/2;
+						for (let k = 0; k < NUM; ++k) {
+							const z = k-(NUM-1)/2;
+							const index = ((i*NUM+j)*NUM)+k;
+							params[index] = {x: x, y: y, z: z};
+							let type = TNT_DIM[i][NUM-j-1][k];
+							if (type == 9) { type = Math.floor(TNT_MAT.length*Math.random()); }
+							tnt.add(new THREE.Mesh(TNT_PART, TNT_MAT[type]));
+						}
+					}
+				}
+				tnt.scale.set(0.1, 0.1, 0.1);
+				return [tnt, params];
+			}
+			function resetTNT() {
+				for (let i = 0; i < NUM; ++i) {
+					for (let j = 0; j < NUM; ++j) {
+						for (let k = 0; k < NUM; ++k) {
+							const index = ((i*NUM+j)*NUM)+k;
+							tnt.children[index].position.set(params[index].x, params[index].y, params[index].z);
+							tnt.children[index].rotation.set(0, 0, 0);
+						}
+					}
+				}
+				return tnt;
+			}
+			function setTNTParams() {
+				G = Number(document.querySelector('#g').value)*5/10000;
+				const v		= Number(document.querySelector('#v').value)/2;
+				const r		= Number(document.querySelector('#r').value)/50;
+				for (let i = 0; i < NUM; ++i) {
+					for (let j = 0; j < NUM; ++j) {
+						for (let k = 0; k < NUM; ++k) {
+							const index = ((i*NUM+j)*NUM)+k;
+							params[index] = {...params[index],
+								vx: ((params[index].x+(Math.random()-0.5))*(Math.random()-0.5)*v  )*0.05,
+								vy: ((params[index].y+(Math.random()-0.5))*(Math.random()-0.5)*v+6)*0.05,
+								vz: ((params[index].z+(Math.random()-0.5))*(Math.random()-0.5)*v  )*0.05,
+								rx: (Math.random()-0.5)*r, ry: (Math.random()-0.5)*r, rz: (Math.random()-0.5)*r
+							};
+						}
+					}
+				}
+			}
+			
+			const [tnt, params] = createTNT();
+			setTNTParams();
+			scene.add(tnt);
+			
+			const renderer = new THREE.WebGLRenderer();
+			renderer.setSize(getWidth(), getHeight());
+			renderer.setClearColor(0x404040);
+			renderer.xr.enabled = true;
+
+			const controllerModelFactory = new XRControllerModelFactory();
+//			for (let i = 0; i < 2; i++) {
+//				const controller = renderer.xr.getController(i);
+//				scene.add(controller);
+//				const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]);
+//				const line = new THREE.Line(geometry);
+//				line.name = 'line';
+//				line.scale.z = 5;
+//				controller.add(line);
+//				const controllerGrip = renderer.xr.getControllerGrip(i);
+//				controllerGrip.add(controllerModelFactory.createControllerModel(controllerGrip));
+//				scene.add(controllerGrip);
+//				controller.addEventListener('selectstart', bomb());
+//			}
+			renderer.xr.getController(0).addEventListener('selectstart', () => { dir = (dir == 0)?-1:0; });
+			renderer.xr.getController(1).addEventListener('selectstart', () => { dir = (dir == 0)? 1:0; });
+
+			canvas.appendChild(renderer.domElement);
+			canvas.appendChild(VRButton.createButton(renderer));
+/*
+			const arButton = document.createElement("button");
+			arButton.textContent = "ENTER AR";
+			arButton.style.cssText = `position: absolute; bottom: 20px; left: 20px; padding: 12px 20px; font-size: 18px; background: #222;
+			color: white; border-radius: 8px;`;
+			document.body.appendChild(arButton);
+			arButton.addEventListener("click", async () => {
+				const session = await navigator.xr.requestSession("immersive-ar", { requiredFeatures: ["local-floor"] });
+				renderer.xr.setSession(session);
+			});
+*/			
+
+			const camera = new THREE.PerspectiveCamera(75, getWidth()/getHeight(), 0.01, 5000);
+			camera.updateProjectionMatrix();
+			const rig = new THREE.Group();
+			rig.add(camera);
+			rig.position.set(0, -1.6, 8);
+			scene.add(rig);
+			
+			let dir = 0;
+			let time = 0;
+			let elapsed = 0;
+			function reset() {
+				console.log(elapsed);
+				elapsed = 0;
+				dir = 0;
+				time = 0;
+				control.classList.remove('running');
+				resetTNT();
+				setTNTParams();
+			};
+
+			reset();
+			document.querySelector('#play')  .addEventListener('click', () => { dir =  1; });
+			document.querySelector('#pause') .addEventListener('click', () => { dir =  0; });
+			document.querySelector('#rewind').addEventListener('click', () => { dir = -1; });
+			document.querySelector('#rec')	 .addEventListener('click', () => {
+				const stream = renderer.domElement.captureStream(30);
+				const recorder = new MediaRecorder(stream, {mimeType: 'video/webm;codecs=vp9'});
+				const chunks = [];
+				recorder.ondataavailable = (e) => chunks.push(e.data);
+				recorder.onstop = () => {
+				  const blob = new Blob(chunks, {type: 'video/webm'});
+				  const a = document.createElement('a');
+				  a.href = URL.createObjectURL(blob);
+				  a.download = 'recorded.webm';
+				  a.click();
+				};
+				recorder.start();
+				setTimeout(() => recorder.stop(), 16000);
+			});
+			document.querySelectorAll('.reset').forEach((element) => element.addEventListener('input', reset));
+			function animate() {
+				if (dir != 0) {
+					time += dir * Number(document.querySelector('#s').value)/10;
+					control.classList.add("running");
+					if (time > 1000 || time <= 0) { reset(); }
+					else {
+						const start = performance.now()
+						for (let i = 0; i < NUM*NUM*NUM; ++i) {
+							const p = params[i];
+							const part = tnt.children[i];
+							part.position.set(p.x + p.vx*time, p.y + p.vy*time - 0.5*G*time*time, p.z + p.vz*time);
+							part.rotation.set(p.rx*time, p.ry*time, p.rz*time);
+						}
+						elapsed += performance.now() - start;
+					}
+				}
+				renderer.render(scene, camera);
+			}
+			renderer.setAnimationLoop(animate);
+			
+			const raycaster = new THREE.Raycaster();
+			const mouse = new THREE.Vector2();
+			renderer.domElement.addEventListener('pointerdown', event => {
+				const rect = renderer.domElement.getBoundingClientRect();
+				const x =  ((event.clientX - rect.left)/rect.width)*2 - 1;
+				const y = -((event.clientY - rect.top)/rect.height)*2 + 1;
+				mouse.set(x, y);
+				raycaster.setFromCamera(mouse, camera);
+				const intersects = raycaster.intersectObjects(scene.children, true);
+				if (intersects.length > 0) {
+					let obj = intersects[0].object;
+					while (obj.parent && !(obj.userData && obj.userData.id)) { obj = obj.parent; }
+					if (obj.userData && obj.userData.id == 'TNT') { dir = 1; }
+				}
+			});
+		</script>
+	</body>
+</html>

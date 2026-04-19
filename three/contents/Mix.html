@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<meta name="Author" content="Sakamoto Takashi">
+	<head><title>Mix</title></head>
+	<body>
+		<div id="control">
+			<button id="bFanStop"  >無風</button>
+			<button id="bFanWeak"  >弱風</button>
+			<button id="bFanStrong">強風</button>
+			<button id="bFanShake" >首振</button>
+			&nbsp;&nbsp;&nbsp;
+			<button id="bRotorStart">始動</button>
+			<button id="bRotorStop" >停止</button>
+			<button id="bRotorClose">折畳</button>
+			<button id="bRotorOpen" >展開</button>
+		</div>
+		<div id="canvas" style="width: 98vw; height: 94vh;">
+		</div>
+		<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+		<script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+		<script>
+class ThreeUtil {
+	#sizeAdjustment = true;
+	#width  = 800;
+	#height = 450;
+	#camera = null;
+	#renderer = null;
+	#scene = null;
+	#objectInventory = null;
+	#geometryInventory = null;
+	#materialInventory = null;
+	#objectMap = null;
+	getRenderer()	{ return this.#renderer; }
+	getScene()		{ return this.#scene; }
+	getCamera()		{ return this.#camera; }
+	createGeometry(data, mode) {
+		function createShape(path) {
+			let elem = path.match(/[A-Za-z]|-?\d+(\.\d+)?/g);
+			if (elem.length == 0) { throw new Error(); }
+			const shape = new THREE.Shape();
+			let index = 0;
+			while (index < elem.length) {
+				let token = elem[index++];
+				switch (token) {
+				case 'M':
+					if (index + 2 > elem.length) { throw new Error(); }
+					shape.moveTo(Number(elem[index]), Number(elem[index+1]));
+					index += 2;
+					break;
+				case 'L':
+					if (index + 2 > elem.length) { throw new Error(); }
+					shape.lineTo(Number(elem[index]), Number(elem[index+1]));
+					index += 2;
+					break;
+				case 'Q':
+					if (index + 4 > elem.length) { throw new Error(); }
+					shape.quadraticCurveTo(
+						Number(elem[index]),   Number(elem[index+1]),
+						Number(elem[index+2]), Number(elem[index+3]));
+					index += 4;
+					break;
+				case 'C':
+					if (index + 6 > elem.length) { throw new Error(); }
+					shape.bezierCurveTo(
+						Number(elem[index]),   Number(elem[index+1]),
+						Number(elem[index+2]), Number(elem[index+3]),
+						Number(elem[index+4]), Number(elem[index+5]));
+					index += 6;
+					break;
+				case 'Z':
+					shape.closePath();
+					break;
+				default:
+					console.log('ignore: ' + token);
+					break;
+				}
+			}
+			return shape;
+		}
+		function createPoints(data) {
+			const points = [];
+			data.forEach((datum) => points.push(new THREE.Vector2(datum.x, datum.y)));
+			return points;
+		}
+
+		let geometry = null;
+		switch (data.type) {
+			case "Comment":
+			case "comment":
+				return null;
+			case "Link":
+				geometry = this.#geometryInventory.get(data.linkTo);
+				break;
+			case "BoxGeometry":				// 直方体
+			case "Box":
+				geometry = new THREE.BoxGeometry(data.width, data.height, data.depth, data.widthSegments, data.heightSegments, data.depthSegments);
+				break;
+			case "CapsuleGeometry":			// カプセル
+			case "Capsule":
+				geometry = new THREE.CapsuleGeometry(data.radius, data.height, data.capSegments, data.radialSegments, data.heightSegments);
+				break;
+			case "CircleGeometry":			// 円盤
+			case "Circle":
+				geometry = new THREE.CircleGeometry(data.radius, data.segments, data.thetaStart, data.thetaLength);
+				break;
+			case "ConeGeometry":			// 円錐
+			case "Cone":
+				geometry = new THREE.ConeGeometry(data.radius, data.height, data.radialSegments, data.heightSegments, data.openEnded, data.thetaStart, data.thetaLength);
+				break;
+			case "CylinderGeometry":		// 円筒
+			case "Cylinder":
+				geometry = new THREE.CylinderGeometry(data.radiusTop, data.radiusBottom, data.height, data.radialSegments, data.heightSegments, data.openEnded, data.thetaStart, data.thetaLength);
+				break;
+			case "DodecahedronGeometry":	// 十二面体
+			case "Dodecahedron":
+				geometry = new THREE.DodecahedronGeometry(data.radius, data.detail);
+				break;
+			case "EdgesGeometry":			// ヘルパー
+			case "Edges":
+				break;
+			case "ExtrudeGeometry":			// 押し出し
+			case "Extrude":
+				geometry = new THREE.ExtrudeGeometry(createShape(data.shape), data.options);
+				break;
+			case "IcosahedronGeometry":		// 二十面体
+			case "Icosahedron":
+				geometry = new THREE.IcosahedronGeometry(data.radius, data.detail);
+				break;
+			case "LatheGeometry":			// 旋盤
+			case "Lathe":
+				geometry = new THREE.LatheGeometry(createPoints(data.points), data.segments);
+				break;
+			case "OctahedronGeometry":		// 八面体
+			case "Octahedron":
+				geometry = new THREE.OctahedronGeometry(data.radius, data.detail);
+				break;
+			case "PlaneGeometry":			// 面
+			case "Plane":
+				geometry = new THREE.PlaneGeometry(data.width, data.height, data.widthSegments, data.heightSegments);
+				break;
+			case "PolyhedronGeometry":		// 多面体
+			case "Polyhedron":
+				break;
+			case "RingGeometry":			// リング
+			case "Ring":
+				geometry = new THREE.RingGeometry(data.innerRadius, data.outerRadius, data.thetaSegments, data.phiSegments, data.thetaStart, data.thetaLength);
+				break;
+			case "ShapeGeometry":			// シェープ
+			case "Shape":
+				geometry = new THREE.ShapeGeometry(createShape(data.shape), data.curveSegments);
+				break;
+			case "SphereGeometry":			// 球
+			case "Sphere":
+				geometry = new THREE.SphereGeometry(data.radius, data.widthSegments, data.heightSegments, data.phiStart, data.phiLength, data.thetaStart, data.thetaLength);
+				break;
+			case "TetrahedronGeometry":		// 四面体
+			case "Tetrahedron":
+				geometry = new THREE.TetrahedronGeometry(data.radius, data.detail);
+				break;
+			case "TorusGeometry":			// トーラス
+			case "Torus":
+				geometry = new THREE.TorusGeometry(data.radius, data.tube, data.radialSegments, data.tubularSegments, data.arc);
+				break;
+			case "TorusKnotGeometry":		// トーラス結び目
+			case "TorusKnot":
+				geometry = new THREE.TorusKnotGeometry(data.radius, data.tube, data.tubularSegments, data.radialSegments, data.p, data.q);
+				break;
+			case "TubeGeometry":			// チューブ
+			case "Tube":
+				break;
+			case "Custom":					// カスタム
+				geometry = window[data.func](data);
+				break;
+			case "WireframeGeometry":		// ヘルパー
+			case "Wireframe":
+				break;
+			default:
+				if (data.type != null && data.type.startsWith("Link:")) {
+					geometry = this.#geometryInventory.get(data.type.substring("Link:".length));
+					break;
+				}
+				console.log(data.type + " is not supported in createGeometry()");
+		}
+		if (geometry == null) { return null; }
+		if (data.name && !mode) { this.#geometryInventory.set(data.name, geometry); }
+		return geometry;
+	}
+	createMaterial(data, mode) {
+		let material = null;
+		switch (data.type) {
+			case "Comment":
+			case "comment":
+				return null;
+			case "Link":
+				material = this.#materialInventory.get(data.linkTo);
+				break;
+			case "LineBasicMaterial":		// ワイヤーフレーム用
+			case "LineBasic":
+				data.type = "LineBasicMaterial";
+				material = new THREE.LineBasicMaterial(data);
+				break;
+			case "LineDashedMaterial":		// ワイヤーフレーム用(点線)
+			case "LineDashed":
+				data.type = "LineDashedMaterial";
+				break;
+			case "MeshBasicMaterial":		// シンプル
+			case "MeshBasic":
+				data.type = "MeshBasicMaterial";
+				material = new THREE.MeshBasicMaterial(data);
+				break;
+			case "MeshDepthMaterial":		// 白黒
+			case "MeshDepth":
+				data.type = "MeshDepthMaterial";
+				material = new THREE.MeshDepthMaterial(data);
+				break;
+			case "MeshDistanceMaterial":	// 影用
+			case "MeshDistance":
+				data.type = "MeshDistanceMaterial";
+				break;
+			case "MeshLambertMaterial":		// 光沢のない表面（鏡面反射なし）用
+			case "MeshLambert":
+				data.type = "MeshLambertMaterial";
+				material = new THREE.MeshLambertMaterial(data);
+				break;
+			case "MeshMatcapMaterial":		// 色と陰影(ライトに反応しない)
+			case "MeshMatcap":
+				data.type = "MeshMatcapMaterial";
+				material = new THREE.MeshMatcapMaterial(data);
+				break;
+			case "MeshNormalMaterial":		// 法線ベクトルを RGB カラーにマッピング
+			case "MeshNormal":
+				data.type = "MeshNormalMaterial";
+				material = new THREE.MeshNormalMaterial(data);
+				break;
+			case "MeshPhongMaterial":		// 鏡面反射ハイライトを持つ光沢のある表面用
+			case "MeshPhong":
+				data.type = "MeshPhongMaterial";
+				material = new THREE.MeshPhongMaterial(data);
+				break;
+			case "MeshPhysicalMaterial":	// 物理ベースのレンダリング (MeshStandardMaterialの拡張)
+			case "MeshPhysical":
+				data.type = "MeshPhysicalMaterial";
+				material = new THREE.MeshPhysicalMaterial(data);
+				break;
+			case "MeshStandardMaterial":	// 標準的な物理ベース 
+			case "MeshStandard":
+				data.type = "MeshStandardMaterial";
+				material = new THREE.MeshStandardMaterial(data);
+				break;
+			case "MeshToonMaterial":		// トゥーンシェーディング
+			case "MeshToon":
+				data.type = "MeshToonMaterial";
+				material = new THREE.MeshToonMaterial(data);
+				break;
+			case "PointsMaterial":			// 多数の点
+			case "Points":
+				data.type = "PointsMaterial";
+				break;
+			case "RawShaderMaterial":		// ShaderMaterial類似
+			case "RawShader":
+				data.type = "RawShaderMaterial";
+				break;
+			case "ShaderMaterial":			// カスタム
+			case "Shader":
+				data.type = "ShaderMaterial";
+				break;
+			case "ShadowMaterial":			// 影用
+			case "Shadow":
+				data.type = "ShadowMaterial";
+				break;
+			case "SpriteMaterial":			// スプライト用
+			case "Sprite":
+				data.type = "SpriteMaterial";
+				break;
+			case "Custom":					// カスタム
+				data.type = "Custom";
+				material = window[data.func](data);
+				break;
+			default:
+				if (data.type != null && data.type.startsWith("Link:")) {
+					material = this.#materialInventory.get(data.type.substring("Link:".length));
+					break;
+				}
+				console.log(m.type + " is not supported in createMaterial()");
+		}
+		if (material == null) { return null; }
+		if (data.name && !mode) { this.#materialInventory.set(data.name, material); }
+		return material;
+	}
+	createObject(data, mode) {
+		let object = null;
+		switch (data.type) {
+			case "Comment":
+			case "comment":
+				return null;
+			case "Link":
+				object = this.#objectInventory.get(data.linkTo).clone();
+				break;
+			case "Group":
+				object = new THREE.Group();
+				data.children.forEach((child) => {
+					const childObject = this.createObject(child, mode);
+					if (childObject != null) { object.add(childObject); }
+				});
+				break;
+			case "Mesh":
+				const geometry = this.createGeometry(data.geometry);
+				if (geometry == null) { break; }
+				const material = this.createMaterial(data.material);
+				if (material == null) { break; }
+				object = (data.wireframe == true)?new THREE.LineSegments(new THREE.WireframeGeometry(geometry), material):new THREE.Mesh(geometry, material);
+				break;
+			case "Custom":					// カスタム
+				object = window[data.func](data);
+				break;
+			default:
+				if (data.type != null && data.type.startsWith("Link:")) {
+					object = this.#objectInventory.get(data.type.substring("Link:".length)).clone();
+					break;
+				}
+				console.log(data.type + " is not supported in createObject()");
+		}
+		if (object == null) { return null; }
+		if (data.rotation)	{ object.rotation.set(data.rotation.x??0, data.rotation.y??0, data.rotation.z??0); }
+		if (data.scale)		{ object.scale.set(   data.scale.x   ??1, data.scale.y   ??1, data.scale.z   ??1); }
+		if (data.position)	{ object.position.set(data.position.x??0, data.position.y??0, data.position.z??0); }
+		if (data.name)		{
+			if (mode) { this.#objectMap.set(data.name, object); } else { this.#objectInventory.set(data.name, object); }
+		}
+		return object;
+	}
+	createRenderer(data) {
+		const renderer = new THREE.WebGLRenderer();
+		renderer.setSize(data.width, data.height);
+		if (data.alpha)	{ renderer.setClearColor(data.background_color, 0); }
+		else			{ renderer.setClearColor(data.background_color); }
+		return renderer;
+	}
+	createCamera(data) {
+		function createPerspectiveCamera(data) {
+			const camera = new THREE.PerspectiveCamera(data.fov, data.aspect, data.near, data.far);
+			camera.position.set(data.position.x, data.position.y, data.position.z);
+			camera.lookAt(new THREE.Vector3(data.lookAt.x, data.lookAt.y, data.lookAt.z));
+			return camera;
+		}
+		function createOrthographicCamera(data) {
+			const camera = new THREE.OrthographicCamera(data.left, data.right, data.top, data.bottom, data.near, data.far);
+			camera.position.set(data.position.x, data.position.y, data.position.z);
+			camera.lookAt(new THREE.Vector3(data.lookAt.x, data.lookAt.y, data.lookAt.z));
+			return camera;
+		}
+		
+		switch (data.type) {
+			case "PerspectiveCamera":		// 透視投影法
+			case "Perspective":
+				return createPerspectiveCamera(data);
+			case "OrthographicCamera":		// 正投影 
+			case "Orthographic":
+				return createOrthographicCamera(data);
+		}
+		console.log(data.type + " is not supported in createCamera()");
+		return null;
+	}
+	createLight(data) {
+		function createAmbientLight(data) {
+			const color = data.color.startsWith('#')?Number('0x' + data.color.substring(1)):Number(data.color);
+			return new THREE.AmbientLight(color, data.intensity);
+		}
+		function createDirectionalLight(data) {
+			const color = data.color.startsWith('#')?Number('0x' + data.color.substring(1)):Number(data.color);
+			const light = new THREE.DirectionalLight(color, data.intensity);
+			light.position.set(data.position.x, data.position.y, data.position.z);
+			light.target.position.set(data.target.position.x, data.target.position.y, data.target.position.z);
+			return light;
+		}
+		function createHemisphereLight(data) {
+			const skyColor = data.skyColor.startsWith('#')?Number('0x' + data.skyColor.substring(1)):Number(data.skyColor);
+			const groundColor = data.groundColor.startsWith('#')?Number('0x' + data.groundColor.substring(1)):Number(data.groundColor);
+			const light = new THREE.HemisphereLight(skyColor, groundColor, data.intensity);
+			light.position.set(data.position.x, data.position.y, data.position.z);
+			return light;
+		}
+		function createPointLight(data) {
+			const color = data.color.startsWith('#')?Number('0x' + data.color.substring(1)):Number(data.color);
+			const light = new THREE.PointLight(color, data.intensity, data.distance, data.decay);
+			light.position.set(data.position.x, data.position.y, data.position.z);
+			return light;
+		}
+		function createRectAreaLight(data) {
+			const color = data.color.startsWith('#')?Number('0x' + data.color.substring(1)):Number(data.color);
+			const light = new THREE.RectAreaLight(color, data.intensity, data.width, data.height);
+			light.position.set(data.position.x, data.position.y, data.position.z);
+			light.lookAt(data.lookAt.x, data.lookAt.y, data.lookAt.z);
+			return light;
+		}
+		function createSpotLight(data) {
+			const color = data.color.startsWith('#')?Number('0x' + data.color.substring(1)):Number(data.color);
+			const light = new THREE.SpotLight(color, data.intensity, data.distance, data.angle, data.penumbra, data.decay);
+			light.position.set(data.position.x, data.position.y, data.position.z);
+			light.target.position.set(data.target.position.x, data.target.position.y, data.target.position.z);
+			return light;
+		}
+		
+		switch (data.type) {
+			case "AmbientLight":		// 環境光
+			case "Ambient":
+				return createAmbientLight(data);
+			case "DirectionalLight":	// 指向性(平行)
+			case "Directional":
+				return createDirectionalLight(data);
+			case "HemisphereLight":		// 空・地の2色
+			case "Hemisphere":
+				return createHemisphereLight(data);
+			case "PointLight":			// 点光源
+			case "Point":
+				return createPointLight(data);
+			case "RectAreaLight":		// 長方形(明るい窓やストリップライトなどの光源)
+			case "RectArea":
+				return createRectAreaLight(data);
+			case "SpotLight":			// スポットライト(円錐)
+			case "Spot":
+				return createSpotLight(data);
+		}
+		console.log(data.type + " is not supported in createLight()");
+		return null;
+	}
+	createFog(data) {
+		const color = data.color.startsWith('#')?Number('0x' + data.color.substring(1)):Number(data.color);
+		switch (data.type) {
+			case "Fog":			// 線形フォグ
+				return new THREE.Fog(color, data.near, data.far);
+			case "FogExp2":		// 指数二乗フォグ
+			case "Fog2":
+				return new THREE.FogExp2(color, data.density);
+		}
+		console.log(data.type + " is not supported in createFog()");
+		return null;
+	}
+	
+	constructor(text) {
+		this.#objectInventory = new Map();
+		this.#geometryInventory = new Map();
+		this.#materialInventory = new Map();
+		this.#objectMap = new Map();
+		this.#scene = new THREE.Scene();
+
+		const jsonObject = JSON.parse(text);
+		
+		if (jsonObject.geometryInventory)	{ jsonObject.geometryInventory.forEach((data) => this.createGeometry(data, false)); }
+		if (jsonObject.materialInventory)	{ jsonObject.materialInventory.forEach((data) => this.createMaterial(data, false)); }
+		if (jsonObject.objectInventory)		{ jsonObject.objectInventory  .forEach((data) => this.createObject  (data, false)); }
+		
+		const lightDefinition = jsonObject.lights ?? JSON.parse(`[
+			{
+				"type": "DirectionalLight", "color": "#ffffff", "intensity": 1,
+				"position": { "x": 1, "y": 1, "z": 1 }, "target": { "position": { "x": 0, "y": 0, "z": 0 } }
+			},
+			{ "type": "AmbientLight", "color": "#999999", "intensity": 2 }
+		]`);
+		lightDefinition.forEach((data) => this.#scene.add(this.createLight(data)));
+
+		if (jsonObject.objects) {
+			jsonObject.objects.forEach((data) => {
+				const object = this.createObject(data, true);
+				if (object != null) { this.#scene.add(object);  }
+			});
+		}
+
+		if (jsonObject.fog) {
+			const fog = this.createFog(jsonObject.fog);
+			if (fog != null) { this.#scene.fog = fog; }
+		}
+
+		const rendererDefinition = jsonObject.renderer ?? JSON.parse(`{ "background_color": "#606060" }`);
+		this.#sizeAdjustment = false;
+		if (rendererDefinition.width == null || rendererDefinition.height == null) {
+			rendererDefinition.width  = this.#width;
+			rendererDefinition.height = this.#height;
+			this.#sizeAdjustment = true;
+		}
+		this.#width		= rendererDefinition.width;
+		this.#height	= rendererDefinition.height;
+		this.#renderer	= this.createRenderer(rendererDefinition);
+
+		const cameraDefinition = jsonObject.camera ?? JSON.parse(`{
+			"type": "PerspectiveCamera", "fov": 75, "aspect": ${this.#width/this.#height},
+			"near": 1, "far": 1000, "position": { "x": 0, "y": 0, "z": 40 }, "lookAt": { "x": 0, "y": 0, "z": 0 }
+		}`);
+		this.#camera = this.createCamera(cameraDefinition);
+		this.#renderer.render(this.#scene, this.#camera);
+	}
+	setSize(width, height) {
+		if (!this.#sizeAdjustment) { return; }
+		this.#width = width;
+		this.#height = height;
+		this.#renderer.setSize(this.#width, this.#height);
+		this.#camera.aspect = this.#width / this.#height;
+		this.#camera.updateProjectionMatrix();
+	}
+	update() {
+		if (this.#renderer != null) { this.#renderer.render(this.#scene, this.#camera); }
+	}
+	getObject(name) { return this.#objectMap.get(name); }
+}
+			
+		</script>
+		<script>
+function createObliqueCylinderGeometry(data) {
+	geometry = new THREE.CylinderGeometry(data.radius, data.radius, data.height, data.radialSegments, data.heightSegments, data.openEnded, data.thetaStart, data.thetaLength);
+	const position = geometry.attributes.position;
+	for (let i = 0; i < position.count; ++i) {
+		const y = position.getY(i);
+		if (y > 0) {
+			const x = position.getX(i);
+			position.setY(i, data.height/2*Math.abs(x)/data.radius);
+		}
+	}
+	position.needsUpdate = true;
+	return geometry;
+}
+function createTailGeometry(data) {
+	class HelixCurve extends THREE.Curve {
+		constructor(radius = 5, height = 10, turns = 5) {
+			super();
+			this.radius = radius;
+			this.height = height;
+			this.turns = turns;
+		}
+		getPoint(t) {
+			const angle = this.turns*2*Math.PI*t;
+			const radius = (t<1/this.turns)?this.radius*t*this.turns:this.radius;
+			return new THREE.Vector3(radius*Math.cos(angle), this.height*t, radius*Math.sin(angle));
+		}
+	}
+
+	const path = new HelixCurve(data.helixRadius, data.helixHeight, data.helixTurns);
+	return new THREE.TubeGeometry(path, data.tubularSegments, data.radius, data.radialSegments, data.closed);
+}
+		</script>
+		<script>
+			const canvas = document.querySelector('#canvas');
+			function getWidth()  { return canvas.getBoundingClientRect().width; }
+			function getHeight() { return canvas.getBoundingClientRect().height; }
+
+			const FanWindMode	= { Stop: 'Stop', Weak: 'Weak', Strong: 'Strong' };
+			const FanShakeMode	= { Stop: 'Stop', Strong: 'Strong' };
+			const RotorMode		= { Stop: 'Stop', Strong: 'Strong' };
+			const RotorState	= { Open: 'Open', Close: 'Close' };
+			
+			const FanWindRange		= { Stop: 0, Weak: 0.2, Strong: 0.5, Step: 0.002 };
+			const FanShakeRange		= { Stop: 0, Strong: 0.004, Step: 0.00002, Min: -0.6, Max: 0.6 };
+			const RotorSpeedRange	= { Stop: 0, Strong: 0.4, Step: 0.002 };
+			const RotorAngleRange	= { Open: 0, Close: 1.6, Step: 0.01 };
+			
+			let fanWindMode		= FanWindMode.Stop;
+			let fanShakeMode	= FanShakeMode.Stop;
+			let rotorMode		= RotorMode.Stop;
+			let rotorState		= RotorState.Open;
+			
+			let fanWindSpeed	= 0;
+			let fanShakeSpeed	= 0;
+			let fanShakePause	= 0;
+			let fanShakeDir		= -1;
+			let rotorSpeed		= 0;
+			let rotorAngle		= 0;
+						
+			document.querySelector('#bFanStop')		.addEventListener('click', () => { fanWindMode = FanWindMode.Stop; fanShakeMode = FanShakeMode.Stop; });
+			document.querySelector('#bFanWeak')		.addEventListener('click', () => { fanWindMode = FanWindMode.Weak; });
+			document.querySelector('#bFanStrong')	.addEventListener('click', () => { fanWindMode = FanWindMode.Strong; });
+			document.querySelector('#bFanShake')	.addEventListener('click', () => { fanShakeMode = (fanShakeMode == FanShakeMode.Stop)?FanShakeMode.Strong:FanShakeMode.Stop; });
+			document.querySelector('#bRotorStart')	.addEventListener('click', () => { rotorMode = RotorMode.Strong; });
+			document.querySelector('#bRotorStop')	.addEventListener('click', () => { rotorMode = RotorMode.Stop; });
+			document.querySelector('#bRotorClose')	.addEventListener('click', () => { rotorState = RotorState.Close; });
+			document.querySelector('#bRotorOpen')	.addEventListener('click', () => { rotorState = RotorState.Open; });
+			
+			canvas.addEventListener('dragover', (ev) => ev.preventDefault());
+			let threeUtil = null;
+			{
+			threeUtil = new ThreeUtil(`
+{
+	"renderer": { "background_color": "#606060" },
+	"camera": {"type": "PerspectiveCamera", "fov": 75, "aspect": 1.5, "near": 0.01, "far": 80, "position": {"x": 0, "y": 0, "z": 50}, "lookAt": {"x": -2.5, "y": 1.2, "z": 8}},
+	"geometryInventory": [
+		{"name": "G_SPHERE",	"type": "Sphere",	"radius": 1, "widthSegments": 64, "heightSegments": 32},
+		{"name": "G_CYL1",		"type": "Cylinder", "radiusTop": 1, "radiusBottom": 1, "height": 1, "radialSegments": 64},
+		{"name": "G_CYL2",		"type": "Cylinder", "radiusTop": 0.8, "radiusBottom": 1.2, "height": 4, "radialSegments": 64},
+		{"name": "G_CONE",		"type": "Cone",     "radius": 1, "height": 1, "radialSegments": 64},
+		{"name": "G_CUSTOM1",	"type": "Custom",   "func": "createObliqueCylinderGeometry", "radius": 0.8, "height": 2, "radialSegments": 64},
+		{"name": "G_EAR1",		"type": "Extrude",  "shape": "M0,0 L 3,0 L 3,-3 L-1,-3 Z", "options": { "steps": 1, "depth": 1, "bevelEnabled": false }},
+		{"name": "G_EAR2",		"type": "Extrude",  "shape": "M0,0 L-3,0 L-3,-3 L 1,-3 Z", "options": { "steps": 1, "depth": 1, "bevelEnabled": false }},
+		{"name": "G_HSPHERE",	"type": "Sphere",	"radius": 1, "widthSegments": 64, "heightSegments": 32, "phiLength": 3.142},
+		{"name": "G_TAIL",		"type": "Custom",	"func": "createTailGeometry", "helixRadius": 1, "helixHeight":1, "helixTurns": 1.5, "tubularSegments": 200, "radius": 0.3, "radialSegments":16, "closed": false},
+
+		{"type": "comment" }
+	],
+	"materialInventory": [
+		{ "name": "M_Blade", "type": "MeshStandard", "color": "#808080", "metalness": 0.2, "roughness": 0.5 },
+		{ "name": "M_Shaft", "type": "MeshStandard", "color": "#404040", "metalness": 0.4, "roughness": 0.5 },
+		{ "name": "M_Base",  "type": "MeshStandard", "color": "#ff0000", "metalness": 0.6, "roughness": 0.3 },
+		{ "name": "M_Glass", "type": "MeshStandard", "color": "#d0d0ff", "metalness": 0.6, "roughness": 0.3, "transparent": true, "opacity": 0.5 },
+		{ "name": "M_Jet",   "type": "MeshStandard", "color": "#f8f5ea", "metalness": 0.8, "roughness": 0.1 },
+
+		{"name": "M_KORO_SKIN",	"type": "MeshStandard", "color": "#f0d0d0", "metalness": 0.5, "roughness": 0.7},
+		{"name": "M_KORO_EDGE", "type": "MeshStandard", "color": "#907070", "metalness": 0.5, "roughness": 0.7},
+		{"name": "M_KORO_EYE",  "type": "MeshStandard", "color": "#000000", "metalness": 0.5, "roughness": 0.7},
+		{"name": "M_AYU_SKIN",  "type": "MeshStandard", "color": "#c0c0f0", "metalness": 0.5, "roughness": 0.7},
+
+		{ "name": "M_White",		"type": "MeshStandard", "color": "#ffffff", "metalness": 0.2, "roughness": 0.5 },
+		{ "name": "M_Gray",			"type": "MeshStandard", "color": "#c0c0c0", "metalness": 0.2, "roughness": 0.5 },
+		{ "name": "M_BladeColor",	"type": "MeshStandard", "color": "#8080ff", "metalness": 0.2, "roughness": 0.5, "transparent": true, "opacity": 0.7 },
+
+		{"type": "comment" }
+	],
+	"objectInventory": [
+		{ "name": "O_Blade", "type": "Mesh",
+			"geometry": { "type": "Box", "width": 17, "height": 3, "depth": 0.2 },
+			"material": { "type": "Link:M_Blade" }
+		},
+		{ "name": "O_LeftBlade",  "type": "Link:O_Blade", "rotation": { "x": -1.3, "y": 0, "z": 0 } },
+		{ "name": "O_RightBlade", "type": "Link:O_Blade", "rotation": { "x":  1.3, "y": 0, "z": 0 } },
+		{ "name": "O_Shaft", "type": "Mesh",
+			"geometry": { "type": "Capsule", "radius": 3, "height": 4, "radialSegments": 64 },
+			"material": { "type": "Link:M_Shaft" },
+			"position": { "x": 0, "y": 1.5, "z": 0 }
+		},
+		{ "name": "O_LeftBlades", "type": "Group",
+			"children": [
+				{ "type": "Group", "children": [ { "type": "Link:O_LeftBlade" } ], "rotation": { "x": 0, "y":  0,    "z": 0 }, "position": { "x": -6, "y": 0, "z":  0 } },
+				{ "type": "Group", "children": [ { "type": "Link:O_LeftBlade" } ], "rotation": { "x": 0, "y":  1.57, "z": 0 }, "position": { "x":  0, "y": 0, "z":  6 } },
+				{ "type": "Group", "children": [ { "type": "Link:O_LeftBlade" } ], "rotation": { "x": 0, "y":  3.14, "z": 0 }, "position": { "x":  6, "y": 0, "z":  0 } },
+				{ "type": "Group", "children": [ { "type": "Link:O_LeftBlade" } ], "rotation": { "x": 0, "y": -1.57, "z": 0 }, "position": { "x":  0, "y": 0, "z": -6 } },
+				{ "type": "Link:O_Shaft" }
+			]
+		},
+		{ "name": "O_RightBlades", "type": "Group",
+			"children": [
+				{ "type": "Group", "children": [ { "type": "Link:O_RightBlade" } ], "rotation": { "x": 0, "y":  0,    "z": 0 }, "position": { "x": -6, "y": 0, "z":  0 } },
+				{ "type": "Group", "children": [ { "type": "Link:O_RightBlade" } ], "rotation": { "x": 0, "y":  1.57, "z": 0 }, "position": { "x":  0, "y": 0, "z":  6 } },
+				{ "type": "Group", "children": [ { "type": "Link:O_RightBlade" } ], "rotation": { "x": 0, "y":  3.14, "z": 0 }, "position": { "x":  6, "y": 0, "z":  0 } },
+				{ "type": "Group", "children": [ { "type": "Link:O_RightBlade" } ], "rotation": { "x": 0, "y": -1.57, "z": 0 }, "position": { "x":  0, "y": 0, "z": -6 } },
+				{ "type": "Link:O_Shaft" }
+			]
+		},
+		{ "name": "O_BladesTop", "type": "Group",
+			"children": [
+				{ "type": "Mesh",
+					"geometry": { "type": "Lathe", "points": [{ "x": 18, "y": -2 }, { "x": 16, "y": 2 }, { "x": 15, "y": 2 }, { "x": 17, "y": -2 }, { "x": 18, "y": -2 }], "segments": 64 },
+					"material": { "type": "Link:M_Shaft" }
+				},
+				{ "type": "Mesh",
+					"geometry": { "type": "Cylinder", "radiusTop": 4, "radiusBottom": 4, "height": 3, "radialSegments": 64 },
+					"material": { "type": "Link:M_Base" },
+					"position": { "x": 0, "y": 5, "z": 0 }
+				}
+
+			]
+		},
+		{ "name": "O_WingJoint", "type": "Mesh",
+			"geometry": { "type": "Cylinder", "radiusTop": 2, "radiusBottom": 2, "height": 18, "radialSegments": 64 },
+			"material": { "type": "Link:M_Base" },
+			"rotation": { "x": -1.57, "y": 0, "z": 0 }
+		},
+		{ "name": "O_Jet", "type": "Group",
+			"children": [
+				{
+					"type": "Mesh",
+					"geometry": { "type": "Cylinder", "radiusTop": 5, "radiusBottom": 5, "height": 20, "radialSegments": 64 },
+					"material": { "type": "Link:M_Jet" }
+				},
+				{
+					"type": "Mesh",
+					"geometry": { "type": "Sphere", "radius": 5, "widthSegments": 64, "heightSegments": 32 },
+					"material": { "type": "Link:M_Jet" },
+					"scale": { "x": 1, "y": 3, "z": 1 },
+					"position": { "x": 0, "y": 10, "z": 0 }
+				}
+			],
+			"rotation": { "x":-1.57, "y":0, "z": 0 }
+		},
+
+		{"name": "O_AYU", "type": "Group",
+			"children": [
+				{"type": "Mesh", "geometry": {"type": "Link:G_HSPHERE"}, "material": {"type": "Link:M_AYU_SKIN"}, "scale": {"x":1.8, "y":3, "z":5}},
+				{"type": "Mesh", "geometry": {"type": "Link:G_HSPHERE"}, "material": {"type": "Link:M_AYU_SKIN"}, "rotation":{"y":3.14}, "scale": {"x":1.8, "y":3, "z":10}},
+				{"type": "Mesh", "geometry": {"type": "Link:G_CONE"},    "material": {"type": "Link:M_AYU_SKIN"}, "rotation":{"x":-1},   "scale": {"x":0.7, "y":3, "z":1.5}, "position": {"x": 0, "y": 1, "z": -10}},
+				{"type": "Mesh", "geometry": {"type": "Link:G_CONE"},    "material": {"type": "Link:M_AYU_SKIN"}, "rotation":{"x":-2.2}, "scale": {"x":0.7, "y":3, "z":1.5}, "position": {"x": 0, "y":-1, "z": -10}},
+				{"type": "comment" }
+			]
+		},
+		{"name": "O_KORO_HEAD", "type": "Group",
+			"children": [
+				{"type": "Mesh", "geometry": {"type": "Link:G_SPHERE"}, "material": {"type": "Link:M_KORO_SKIN"}, "scale": {"x":7, "y":6, "z":6}},
+				{"type": "Mesh", "geometry": {"type": "Link:G_EAR1"},    "material": {"type": "Link:M_KORO_EDGE"}, "rotation": {"x":-0.9, "y": -0.7, "z":-0.5}, "position": {"x":-4.5, "y":4, "z":1}},
+				{"type": "Mesh", "geometry": {"type": "Link:G_EAR2"},    "material": {"type": "Link:M_KORO_EDGE"}, "rotation": {"x":-0.9, "y":  0.7, "z": 0.5}, "position": {"x": 4.5, "y":4, "z":1}},
+				{"type": "Link:O_AYU", "rotation": {"x": 0, "y":-1.8, "z": 0.5}, "scale": {"x": 0.8, "y": 0.8, "z": 0.8}, "position": {"x":-4.5, "y": 3, "z": 4.5}},
+				{"type": "Mesh", "geometry": {"type": "Link:G_SPHERE"}, "material": {"type": "Link:M_KORO_EYE"}, "scale": {"x":0.5, "y": 0.5, "z": 0.5}, "position": {"x":-2, "y":-0.7, "z":5.5}},
+				{"type": "Mesh", "geometry": {"type": "Link:G_SPHERE"}, "material": {"type": "Link:M_KORO_EYE"}, "scale": {"x":0.5, "y": 0.5, "z": 0.5}, "position": {"x": 2, "y":-0.7, "z":5.5}},
+				{"type": "Mesh", "geometry": {"type": "Link:G_CYL1"},   "material": {"type": "Link:M_KORO_EDGE"}, "scale": {"x": 1.1, "y": 1.1, "z": 0.8}, "rotation": {"x": 1.9}, "position": {"x": 0, "y":-2.6, "z":5.3}},				
+				{"type": "comment" }
+			]
+		},
+		{"name": "O_KORO_LEG", "type": "Group",
+			"children": [
+				{"type": "Mesh", "geometry": {"type": "Link:G_CUSTOM1"}, "material": {"type": "Link:M_KORO_EDGE"}, "position": {"y":4.5}},
+				{"type": "Mesh", "geometry": {"type": "Link:G_CYL2"},    "material": {"type": "Link:M_KORO_SKIN"}, "position": {"y":2.0}},
+				{"type": "comment" }
+			]
+		},
+		{"name": "O_KORO_BODY", "type": "Group",
+			"children": [
+				{"type": "Mesh", "geometry": {"type": "Link:G_SPHERE"}, "material": {"type": "Link:M_KORO_SKIN"}, "scale": {"x":4, "y":4, "z":3}},
+				{"type": "Link:O_KORO_LEG", "rotation": {"y": 0.3, "z": 1.4}, "position": {"x":-2.6, "y":1, "z": 0.5}},
+				{"type": "Link:O_KORO_LEG", "rotation": {"y":-0.3, "z":-1.4}, "position": {"x": 2.6, "y":1, "z": 0.5}},
+				{"type": "Link:O_KORO_LEG", "rotation": {"z": 3.1}, "position": {"x":-1.4, "y":-2.3, "z": 0.5}},
+				{"type": "Link:O_KORO_LEG", "rotation": {"z": 3.2}, "position": {"x": 1.4, "y":-2.3, "z": 0.5}},
+				{"type": "Mesh", "geometry": {"type": "Link:G_TAIL"}, "material": {"type": "Link:M_KORO_SKIN"}, "rotation": {"x":-2}, "position": {"y":-2.8, "z": -2.1}},
+				{"type": "comment" }
+			]
+		},
+
+		{ "name": "O_FrontCoverFrame",	"type": "Mesh",
+			"geometry": { "type": "Lathe", "points": [ {"x": 99, "y": 2}, {"x": 99, "y": -2}, {"x": 102, "y": -2}, {"x": 102, "y": 2}, {"x": 99, "y": 2} ], "segments": 64 },
+			"material": { "type": "Link", "linkTo": "M_White" }
+		},
+		{ "name": "O_FrontCoverSpoke",	"type": "Group",
+			"children": [
+				{ "type": "Mesh",
+				"geometry": { "type": "Box", "width": 80, "height": 2, "depth": 2 },
+				"material": { "type": "Link", "linkTo": "M_White" },
+				"position": { "x": 60, "y": 0.5, "z": 0 }
+				}
+			]
+		},
+		{ "name": "O_FrontCoverSpoke12", "type": "Group",
+			"children": [
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke", "rotation": {"x": 0, "y": 0    , "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke", "rotation": {"x": 0, "y": 0.131, "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke", "rotation": {"x": 0, "y": 0.262, "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke", "rotation": {"x": 0, "y": 0.393, "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke", "rotation": {"x": 0, "y": 0.524, "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke", "rotation": {"x": 0, "y": 0.655, "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke", "rotation": {"x": 0, "y": 0.785, "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke", "rotation": {"x": 0, "y": 0.916, "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke", "rotation": {"x": 0, "y": 1.047, "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke", "rotation": {"x": 0, "y": 1.178, "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke", "rotation": {"x": 0, "y": 1.309, "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke", "rotation": {"x": 0, "y": 1.440, "z": 0} }
+			]
+		},	
+		{ "name": "O_FronCoverTop",		"type": "Mesh",
+			"geometry": { "type": "Cylinder", "radiusTop": 30, "radiusBottom": 30, "height": 2, "radialSegments": 64, "openEnded": false },
+			"material": { "type": "Link", "linkTo": "M_White" }
+		},
+		{ "name": "O_FrontCover",		"type": "Group",
+			"children": [
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke12", "rotation": {"x": 0, "y": 0    , "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke12", "rotation": {"x": 0, "y": 1.571, "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke12", "rotation": {"x": 0, "y": 3.142, "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverSpoke12", "rotation": {"x": 0, "y": 4.712, "z": 0} },
+				{ "type": "Link", "linkTo": "O_FrontCoverFrame" },
+				{ "type": "Link", "linkTo": "O_FronCoverTop" }
+			] 
+		},
+		{ "name": "O_FanBlade",			"type": "Group",
+			"children": [
+				{ "type": "Mesh",
+					"geometry": { "type": "Extrude",
+						"shape": "M 0,10 C 10,12 85,15 90,10 C 95,5 95,-20 90,-25 C 85,-30 10,-8 0,-10 Z",
+						"options": { "steps": 1, "curveSegments": 32, "depth": 2, "bevelEnabled": false }
+					},
+					"material": { "type": "Link", "linkTo": "M_BladeColor" },
+					"rotation": {"x": 0.5, "y": 0, "z": 0 }
+				}
+			]
+		},
+		{ "name": "O_FanCenter",		"type": "Mesh",
+			"geometry": { "type": "Cylinder", "radiusTop": 25, "radiusBottom": 25, "height": 20, "radialSegments": 64, "openEnded": false },
+			"material": { "type": "Link", "linkTo": "M_White" },
+			"rotation": { "x": 1.57, "y": 0, "z": 0 }
+		},
+		{ "name": "O_FanBlades",		"type": "Group",
+			"children": [
+				{ "type": "Link", "linkTo": "O_FanBlade", "rotation": {"x": 0, "y": 0, "z": 0    } },
+				{ "type": "Link", "linkTo": "O_FanBlade", "rotation": {"x": 0, "y": 0, "z": 1.257} },
+				{ "type": "Link", "linkTo": "O_FanBlade", "rotation": {"x": 0, "y": 0, "z": 2.513} },
+				{ "type": "Link", "linkTo": "O_FanBlade", "rotation": {"x": 0, "y": 0, "z": 3.770} },
+				{ "type": "Link", "linkTo": "O_FanBlade", "rotation": {"x": 0, "y": 0, "z": 5.027} },
+				{ "type": "Link", "linkTo": "O_FanCenter" }
+			]
+		},
+		{ "name": "O_OuterFrameFrame",	"type": "Mesh",
+			"geometry": { "type": "Lathe",
+				"points": [ {"x": 102, "y": 2}, {"x": 102, "y": -2}, {"x": 107, "y": -2}, {"x": 107, "y": 2}, {"x": 102, "y": 2} ],
+				"segments": 64
+			},
+			"material": { "type": "Link", "linkTo": "M_White" }
+		},
+		{ "name": "O_OuterFrameSpoke",	"type": "Group",
+			"children": [
+				{ "type": "Mesh",
+					"geometry": { "type": "Box", "width": 2, "height": 40, "depth": 2 },
+					"material": { "type": "Link", "linkTo": "M_White" },
+					"position": { "x": 105, "y": 20, "z": 0 }
+				},
+				{ "type": "Mesh",
+					"geometry": { "type": "Box", "width": 100, "height": 2, "depth": 2 },
+					"material": { "type": "Link", "linkTo": "M_White" },
+					"rotation": { "x": 0, "y": 0, "z": -0.2},
+					"position": { "x": 56.5, "y": 49, "z": 0 }
+				}
+			]
+		},
+		{ "name": "O_OuterFrameSpoke12",	"type": "Group",
+			"children": [
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke", "rotation": {"x": 0, "y": 0    , "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke", "rotation": {"x": 0, "y": 0.131, "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke", "rotation": {"x": 0, "y": 0.262, "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke", "rotation": {"x": 0, "y": 0.393, "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke", "rotation": {"x": 0, "y": 0.524, "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke", "rotation": {"x": 0, "y": 0.655, "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke", "rotation": {"x": 0, "y": 0.785, "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke", "rotation": {"x": 0, "y": 0.916, "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke", "rotation": {"x": 0, "y": 1.047, "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke", "rotation": {"x": 0, "y": 1.178, "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke", "rotation": {"x": 0, "y": 1.309, "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke", "rotation": {"x": 0, "y": 1.440, "z": 0} }
+			]
+		},
+		{ "name": "O_OuterFrameCenter",	"type": "Group",
+			"children": [
+				{ "type": "Mesh",
+					"geometry": { "type": "Cylinder", "radiusTop": 20, "radiusBottom": 25, "height": 70, "radialSegments": 64, "openEnded": false },
+					"material": { "type": "Link", "linkTo": "M_White" }
+				},
+				{ "type": "Mesh",
+					"geometry": { "type": "Sphere", "radius": 20, "widthSegments": 64, "heightSegments": 32 },
+					"material": { "type": "Link", "linkTo": "M_White" },
+					"position": { "x": 0, "y": 35, "z": 0 }
+				}
+			],
+			"position": { "x": 0, "y": 70, "z": 0 }
+		},
+		{ "name": "O_OuterFrame",		"type": "Group",
+			"children": [
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke12", "rotation": {"x": 0, "y": 0    , "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke12", "rotation": {"x": 0, "y": 1.571, "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke12", "rotation": {"x": 0, "y": 3.142, "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameSpoke12", "rotation": {"x": 0, "y": 4.712, "z": 0} },
+				{ "type": "Link", "linkTo": "O_OuterFrameFrame" },
+				{ "type": "Link", "linkTo": "O_OuterFrameCenter" }
+			]
+		},
+		{ "name": "O_Joint",			"type": "Mesh",
+			"geometry": { "type": "Sphere", "radius": 9.5, "widthSegments": 64, "heightSegments": 32 },
+			"material": { "type": "Link", "linkTo": "M_Gray" }
+		},
+		{ "name": "O_Base",				"type": "Group",
+			"children": [
+				{ "type": "Mesh",
+					"geometry": { "type": "Cylinder", "radiusTop": 10, "radiusBottom": 12, "height": 110, "radialSegments": 64, "openEnded": false },
+					"material": { "type": "Link", "linkTo": "M_White" },
+					"position": { "x": 0, "y": -55, "z": -40 }
+				},
+				{ "type": "Mesh",
+					"geometry": { "type": "Extrude",
+						"shape": "M -30,-20 L 30,-20 C 60,-20 60,20 30,20 L -30,20 C -60,20 -60,-20 -30,-20 Z",
+						"options": { "steps": 1, "depth": 10, "bevelEnabled": false }
+					},
+					"material": { "type": "Link", "linkTo": "M_White" },
+					"scale": { "x": 1, "y": 1.5, "z": 1 },
+					"rotation": { "x": 1.57, "y": 0, "z": 1.57 },
+					"position": { "x": 0, "y": -105, "z": -20 }
+				},
+				{ "type": "Mesh",
+					"geometry": { "type": "Cylinder", "radiusTop": 80, "radiusBottom": 80, "height": 10, "radialSegments": 64, "openEnded": false },
+					"material": { "type": "Link", "linkTo": "M_Gray" },
+					"position": { "x": 0, "y": -120, "z": -10 }
+				}
+			]
+		},
+
+		{"type": "comment"}
+	],
+	"objects": [
+		{ "name": "HoverPilder", "type": "Group",
+			"children": [
+				{ "name": "LeftWing", "type": "Group",
+					"children": [
+						{ "type": "Group",
+							"children": [ { "type": "Group", "children": [ { "name": "LeftBlades", "type": "Link:O_LeftBlades" }, { "type": "Link:O_BladesTop" } ] } ],
+							"position": { "x": -40, "y": -4, "z": 0 }
+						},
+						{ "type": "Mesh",
+							"geometry": { "type": "Extrude", "shape": "M0,3 L40,15 L40,-2 L0,-2", "options": { "steps": 1, "depth": 2, "bevelEnabled": false } },
+							"material": { "type": "Link:M_Base" },
+							"rotation": { "x": -1.57, "y": 0, "z": 0 },
+							"position": { "x": -40, "y": 0, "z": 0 }
+						}
+					],
+					"position": { "x": -40, "y": 4, "z": 0 }
+				},
+				{ "name": "RightWing", "type": "Group",
+					"children": [
+						{ "type": "Group",
+							"children": [ { "type": "Group", "children": [ { "name": "RightBlades", "type": "Link:O_RightBlades" }, { "type": "Link:O_BladesTop" } ] } ],
+							"position": { "x": 40, "y": -4, "z": 0 }
+						},
+						{ "type": "Mesh",
+							"geometry": { "type": "Extrude", "shape": "M0,3 L-40,15, L-40,-2 L0,-2", "options": { "steps": 1, "depth": 2, "bevelEnabled": false } },
+							"material": { "type": "Link:M_Base" },
+							"rotation": { "x": -1.57, "y": 0, "z": 0 },
+							"position": { "x": 40, "y": 0, "z": 0 }
+						}
+					],
+					"position": { "x": 40, "y": 4, "z": 0 }
+				},
+				{ "name": "Base", "type": "Group",
+					"children": [
+						{ "type": "Mesh",
+							"geometry": { "type": "Extrude", "shape": "M-40,15 L0,20 L40,15 L40,-2 L-40,-2 Z", "options": { "steps": 1, "depth": 2, "bevelEnabled": false } },
+							"material": { "type": "Link:M_Base" },
+							"rotation": { "x": -1.57, "y": 0, "z": 0 },
+							"position": { "x": 0, "y": 4, "z": 0 }
+						},
+						{ "type": "Link:O_WingJoint", "position": { "x": -40, "y": 5, "z": -6.5 } },
+						{ "type": "Link:O_WingJoint", "position": { "x":  40, "y": 5, "z": -6.5 } },
+						{ "type": "Link:O_Jet", "position": { "x": -13, "y": 11.5, "z": 2 } },
+						{ "type": "Link:O_Jet", "position": { "x":  13, "y": 11.5, "z": 2 } }
+					]
+				},
+				{ "name": "Body", "type": "Group",
+					"children": [
+						{ "type": "Mesh",
+							"geometry": { "type": "Cylinder", "radiusTop": 20, "radiusBottom": 5, "height": 32, "radialSegments": 64 },
+							"material": { "type": "Link:M_Base" },
+							"rotation": { "x": -1.57, "y": 0, "z": 0 },
+							"position": { "x": 0, "y": 0, "z": 11 }
+						},
+						{ "type": "Mesh",
+							"geometry": { "type": "Cylinder", "radiusTop": 18, "radiusBottom": 20, "height": 20, "radialSegments": 64 },
+							"material": { "type": "Link:M_Base" },
+							"rotation": { "x": -1.57, "y": 0, "z": 0 },
+							"position": { "x": 0, "y": 0, "z": -15 }
+						},
+						{ "type": "Mesh",
+							"geometry": { "type": "Sphere", "radius": 16, "widthSegments": 64, "heighSegments": 32 },
+							"material": { "type": "Link:M_Glass" },
+							"scale": { "x": 1, "y": 1, "z": 1.2 },
+							"rotation": { "x": 0, "y": 0, "z":   0 },
+							"position": { "x": 0, "y": 0, "z": -25 }
+						},
+						{ "type": "Mesh",
+							"geometry": { "type": "Sphere", "radius": 18, "widthSegments": 64, "heightSegments": 32, "thetaStart": 1.57, "thetaLength": 3.14 },
+							"material": { "type": "Link:M_Base" },
+							"scale": { "x": 1, "y": 1, "z": 1.2 },
+							"rotation": { "x": 0, "y": 0, "z": 0 },
+							"position": { "x": 0, "y": 0, "z": -23 }
+						},
+						{ "type": "Mesh",
+							"geometry": { "type": "Ring", "outerRadius": 18, "thetaSegments": 64, "phiSegments": 32 },
+							"material": { "type": "Link:M_Base" },
+							"scale": { "x": 1, "y": 1.2, "z": 1 },
+							"rotation": { "x": -1.57, "y": 0, "z": 0 },
+							"position": { "x": 0, "y": 0, "z": -23 }
+						},
+						{ "type": "Mesh",
+							"geometry": { "type": "Extrude", "shape": "M-5,0 L11,20 L52,24 Q19,13 27,0 Z", "options": { "steps": 1, "depth": 2, "bevelEnabled": false } },
+							"material": { "type": "Link:M_Base" },
+							"rotation": { "x": 0, "y": -1.57, "z": 0 },
+							"position": { "x": 0, "y": 4, "z": 0 }
+						},
+						{ "type": "Mesh",
+							"geometry": { "type": "Extrude",
+								"shape": "M-15,-5 L15,-5 C4,-5 4,5 10,7 L-10,7 C-4,5 -4,-5 -15,-5 Z",
+								"options": { "steps": 1, "depth": 20, "bevelEnabled": false }
+							},
+							"material": { "type": "Link:M_Base" },
+							"position": { "x": 0, "y": -22, "z": -26 }
+						}
+					],
+					"position": { "x": 0, "y": 32, "z": 8 }
+				}
+			],
+			"rotation": { "x": 0, "y": 3.14, "z": 0 },
+			"scale": { "x": 0.3, "y": 0.3, "z": 0.3 },
+			"position": { "y":-9.6}
+		},
+		
+		{ "name": "ayukoro", "type": "Group",
+			"children": [
+				{"type": "Link:O_KORO_HEAD", "position": {"y":9}}, 
+				{"type": "Link:O_KORO_BODY"},
+				{"type": "comment"}
+			],
+			"rotation": { "x": 0, "y": 0, "z": 0 },
+			"scale": {"x":0.26, "y": 0.26, "z": 0.26},
+			"position": {"y":0, "z": 6}
+		},
+
+		{ "name": "Fan", "type": "Group",
+			"children": [
+				{ "name": "Head", "type": "Group",
+					"children": [
+						{ "type": "Link", "linkTo": "O_FrontCover", "rotation": { "x": -1.57, "y": 0, "z": 0},	"position": { "x": 0, "y": 25, "z": 85 } },
+						{ "name": "FanBlades", "type": "Link", "linkTo": "O_FanBlades", 						"position": { "x": 0, "y": 25, "z": 65 } },
+						{ "type": "Link", "linkTo": "O_OuterFrame", "rotation": { "x": -1.57, "y": 0, "z": 0},	"position": { "x": 0, "y": 25, "z": 85 } },
+						{ "type": "Link", "linkTo": "O_Joint" }
+					],
+					"rotation": {"x":-0.2},
+					"position": { "x": 0, "y": -5, "z": -65 }
+				},
+				{ "type": "Link", "linkTo": "O_Base",		"position": { "x": 0, "y": -5, "z": -25} }
+			],
+			"rotation": {"y": 2.3},
+			"scale": { "x": 0.009, "y": 0.009, "z": 0.009 },
+			"position": {"x":-2.4, "y": 1.2, "z":8}
+		},
+		
+		{"type": "comment"}
+	]
+}
+			`);
+			}
+			const fanBlades			= threeUtil.getObject("FanBlades");
+			const fanHead			= threeUtil.getObject("Head");
+			const rotorLeftBlades	= threeUtil.getObject("LeftBlades");
+			const rotorRightBlades	= threeUtil.getObject("RightBlades");
+			const rotorLeftWing		= threeUtil.getObject("LeftWing");
+			const rotorRightWing	= threeUtil.getObject("RightWing");
+			
+			threeUtil.setSize(getWidth(), getHeight());
+			const domElement = threeUtil.getRenderer().domElement;
+			canvas.appendChild(domElement);
+			const controls = new THREE.OrbitControls(threeUtil.getCamera(), domElement);
+			Object.assign(controls, {
+				rotateSpeed: 0.5, enableDamping: true, dampingFactor: 0.05, minPolarAngle: 0, maxPolarAngle: Math.PI, minAzimuthAngle: -Infinity, maxAzimuthAngle: Infinity
+			});
+			
+			window.addEventListener('resize', () => {
+				if (threeUtil != null) { threeUtil.setSize(getWidth(), getHeight()); }
+			});
+			
+			function animate() {
+				requestAnimationFrame(animate);
+				controls.update();
+				if (threeUtil != null) {
+					switch (fanWindMode) {
+					case FanWindMode.Stop:
+						if (fanWindSpeed > FanWindRange.Stop) {
+							fanWindSpeed -= FanWindRange.Step;
+							if (fanWindSpeed < FanWindRange.Stop) { fanWindSpeed = FanWindRange.Stop; fanShakeSpeed = FanShakeRange.Stop; }
+						}
+						break;
+					case FanWindMode.Weak:
+						if (fanWindSpeed != FanWindRange.Weak) {
+							if (fanWindSpeed < FanWindRange.Weak) {
+								fanWindSpeed += FanWindRange.Step;
+								if (fanWindSpeed > FanWindRange.Weak) { fanWindSpeed = FanWindRange.Weak; }
+							}
+							else {
+								fanWindSpeed -= FanWindRange.Step;
+								if (fanWindSpeed < FanWindRange.Weak) { fanWindSpeed = FanWindRange.Weak; }
+							}
+						}
+						break;
+					case FanWindMode.Strong:
+						if (fanWindSpeed < FanWindRange.Strong) {
+							fanWindSpeed += FanWindRange.Step;
+							if (fanWindSpeed > FanWindRange.Strong) { fanWindSpeed = FanWindRange.Strong; }
+						}
+						break;
+					}
+					if (fanShakePause == 0) {
+						switch (fanShakeMode) {
+						case FanShakeMode.Stop:
+							if (fanShakeSpeed > FanShakeRange.Stop) {
+								fanShakeSpeed -= fanWindSpeed*FanShakeRange.Step;
+								if (fanShakeSpeed < FanShakeRange.Stop) { fanShakeSpeed = FanShakeRange.Stop; }
+							}
+							break;
+						case FanShakeMode.Strong:
+							if (fanShakeSpeed < FanShakeRange.Strong) {
+								fanShakeSpeed += fanWindSpeed*FanShakeRange.Step;
+								if (fanShakeSpeed > FanShakeRange.Strong) { fanShakeSpeed = FanShakeRange.Strong; }
+							}
+							break;
+						}
+					}
+					switch (rotorMode) {
+					case RotorMode.Stop:
+						if (rotorSpeed > RotorSpeedRange.Stop) {
+							rotorSpeed -= RotorSpeedRange.Step;
+							if (rotorSpeed < RotorSpeedRange.Stop) { rotorSpeed = RotorSpeedRange.Stop; }
+						}
+						break;
+					case RotorMode.Strong:
+						if (rotorSpeed < RotorSpeedRange.Strong) {
+							rotorSpeed += RotorSpeedRange.Step;
+							if (rotorSpeed > RotorSpeedRange.Strong) { rotorSpeed = RotorSpeedRange.Strong; }
+						}
+						break;
+					}
+					switch (rotorState) {
+					case RotorState.Open:
+						if (rotorAngle > RotorAngleRange.Open) {
+							rotorAngle -= RotorAngleRange.Step;
+							if (rotorAngle < RotorAngleRange.Open) { rotorAngle = RotorAngleRange.Open; }
+						}
+						break;
+					case RotorState.Close:
+						if (rotorAngle < RotorAngleRange.Close) {
+							rotorAngle += RotorAngleRange.Step;
+							if (rotorAngle > RotorAngleRange.Close) { rotorAngle = RotorAngleRange.Close; }
+						}
+						break;
+					}
+					
+					fanBlades.rotation.z -= fanWindSpeed;
+					if (fanShakePause > 0) { --fanShakePause; }
+					else {
+						if (fanShakeDir < 0) {
+							fanHead.rotation.y -= fanShakeSpeed*fanShakeDir;
+							if (fanHead.rotation.y > FanShakeRange.Max) { fanShakeDir = -fanShakeDir; fanShakePause = 20; }
+						}
+						else {
+							fanHead.rotation.y -= fanShakeSpeed*fanShakeDir;
+							if (fanHead.rotation.y < FanShakeRange.Min) { fanShakeDir = -fanShakeDir; fanShakePause = 20; }
+						}
+					}
+					rotorLeftBlades		.rotation.y -= rotorSpeed;
+					rotorRightBlades	.rotation.y += rotorSpeed;
+					rotorLeftWing		.rotation.z = -rotorAngle;
+					rotorRightWing		.rotation.z = rotorAngle;
+					threeUtil.update();
+				}
+			}
+
+			animate();
+		</script>
+	</body>
+</html>
