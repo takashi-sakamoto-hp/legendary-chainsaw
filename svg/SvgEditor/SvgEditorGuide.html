@@ -1,0 +1,146 @@
+<!DOCTYPE html PUBLIC "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<meta name="Author" content="Sakamoto Takashi">
+	<title>SvgEditorの使い方</title>
+	<style>
+		body { background: whitesmoke; padding: 5px 10px 5px 10px; line-height: 1.8; }
+		hr { height: 0; margin: 5; padding: 0; border: solid 1px gray; }
+		h1 { font-size: 160%; color: black; text-shadow: 3px 3px 3px lightgray; line-height: 1.5; margin-bottom: 0; }
+		h2 { font-size: 120%; color: black; text-shadow: 2px 2px 2px lightgray; }
+		h3 { font-size: 100%; color: black; text-shadow: 1px 1px 2px lightgray; }
+		table { border-collapse: collapse; }
+		th.border, td.border { border: solid 2px gray; padding: 0px 5px 0px 5px; text-align: left;}
+		div.indent { margin-left: 2em; }
+		.button { font-family: monospace; font-weight: 700; font-size: 115%;}
+		.key	{ font-family: monospace; font-weight: 700; font-size: 115%; }
+		.label	{ font-family: monospace; font-weight: 700; font-size: 115%; }
+		.name	{ font-family: monospace; font-weight: 700; font-size: 115%; }
+	</style>
+</head>
+<body>
+<h1><span class="name">SvgEditor</span> の使い方</h1><hr>
+<h2>はじめに</h2>
+<div class="indent">
+<span class="name">SvgEditor</span> は、マウスを使って画面（キャンバス）上に図形を描くツールである。
+<br>本文書では、「キャンバス」、「属性」、「パス」、「レイヤ」を以下のように定義する。
+<table>
+<tr><th class="border">キャンバス</th>	<td class="border">図形を描く領域。中心が(0,0)、左上隅が(-8192,-8192)、右下隅が(8192, 8192)の16,384x16,384の正方形。</td></tr>
+<tr><th class="border">属性</th>		<td class="border">線の太さ、線の色、塗りつぶしの色等の指定</td></tr>
+<tr><th class="border">パス</th>		<td class="border">始点と終点で定義された線分。SvgEditorでは、直線と3次のベジエ曲線のいずれか</td></tr>
+<tr><th class="border">レイヤ</th>	<td class="border">1個の「属性」に関連付けた複数の「パス」の集まり</td></tr>
+</table>
+キャンバスは9段階のズームが可能で、表示サイズを16384x16,384(x1)から64x64(x256)まで変更できる。
+<br><br>
+<span class="name">SvgEditor</span>の画面は、以下のように分かれている。
+<table>
+	<tr>
+		<td class="border" colspan="2" style="text-align: center;">レイヤ操作</td>
+		<td class="border" rowspan="4" style="text-align: center; width: 6em;">
+			全体の操作
+			<br><br>属性の設定
+			<br><br>パスの操作
+		</td>
+	</tr>
+	<tr style="height: 7em;">
+		<td class="border" rowspan="3" style="width: 7em; text-align: center;">キャンバス</td>
+		<td class="border" rowspan="3" style="width: 7em; text-align: center;">パスの表</td>
+	</tr>
+</table>
+以下、この図の各分類に従って説明する。
+</div>
+<br>
+<h2>全体の操作</h2>
+<div class="indent">
+<table>
+<tr><th class="border">Undo</th>	<td class="border">直前の操作を取り消す。New/Load時には初期化</td></tr>
+<tr><th class="border">New</th>		<td class="border">初期化</td></tr>
+<tr><th class="border">Load</th>	<td class="border">Saveで保存した状態をファイルから読込。（拡張子は「.json」）</td></tr>
+<tr><th class="border">Save</th>	<td class="border">現在の状態をファイルに保存。（拡張子は「.json」）</td></tr>
+<tr><th class="border">Save SVG</th><td class="border">編集した内容をSVGファイルに出力</td></tr>
+<tr>
+	<th class="border">Backgrouond file</th>
+	<td class="border">画像ファイルを指定するとキャンバスの背景に表示。(トレース用)
+	<br>画像ファイルは、<span class="name">SvgEditor</span> と同じフォルダに置いてください。</td>
+</tr>
+</table>
+</div>
+<br>
+<h2>レイヤ操作</h2>
+<div class="indent">
+初期はレイヤ0のみが存在する。
+<br>
+<ul>
+<li>異なる属性を付与したい場合や、同じ属性でも前後関係を持たせたい場合には、<span class="button">[Add]</span>、<span class="button">[Ins]</span> を押して新たなレイヤを作成する。
+<br><span class="button">[Add]</span> は最後にレイヤを追加し、<span class="button">[Ins]</span> は編集対象のレイヤの直前にレイヤを挿入する。</li>
+<li>不要なレイヤは <span class="button">[Del]</span> で削除する。</li>
+<li>レイヤを分割したい場合（異なる属性を付与したい場合等）には、<span class="button">[Dup]</span> を使って編集対象のレイヤと同じ内容を持つレイヤを挿入後、不要なデータを削除する。</li>
+<li>レイヤの順序を入れ替えたい場合には、<span class="button">[<span style="display: inline-block; transform: rotate(-90deg);">&#9650;</span>]</span>、<!--
+--><span class="button">[<span style="display: inline-block; transform: rotate(90deg);">&#9650;</span>]</span> のボタンでレイヤを移動する。</li>
+</ul>
+編集中のレイヤは黄色の背景色で、描画データが存在しないレイヤは灰色の背景色で表示される。
+<br>キャンバスでは、編集中のレイヤにマーカが表示される。マーカを表示したくない場合には左端の <span class="button">[-]</span> を選択する。
+<br>（<span class="key">Shift</span> や <span class="key">Ctrl</span> を押すことでも、マーカは表示は消える）
+<br>
+<br>キャンバスの表示方法は、以下の３種類。
+<table>
+<tr><th class="border">All</th>	<td class="border"   >すべてのレイヤを表示</td></tr>
+<tr><th class="border">0～</th>	<td class="border"   >編集中のレイヤ以下のレイヤを表示</td></tr>
+<tr><th class="border">Current</th><td class="border">編集中のレイヤのみを表示</td></tr>
+</table>
+</div>
+<br>
+<h2>キャンバス</h2>
+<div class="indent">
+マウスの左クリックで始点の位置を決定し、マウスを移動して <span class="key">Shift</span> を押しながら左クリックすると、始点と現在の位置を結ぶ直線を描画する。
+<br>また、<span class="key">Ctrl</span> を押しながら左クリックすると、現在の位置から始点に直線を引いて、図形を閉じる。
+<br>直線は、左ボタンを押しながらのドラッグでも描画可能。
+<br>直線は、後からベジエ曲線に変更できるので、まずは直線で大まかに図形を描く。
+<br>
+<br>ズームはマウスのホイールで行う。
+<br>ズーム時にマウスを右クリックすると、クリックした箇所が中央になるように表示位置を移動する。
+</div>
+<br>
+<h2>パスの表, パスの操作</h2>
+<div class="indent">
+パスを描くとキャンバスの右にある表にパスのパラメータ（始点、終点、制御点）が追加される。
+<br>パスの始点と終点、制御点（ベジエ曲線の場合）に表示されるマーカは、マウスで選択して移動が可能。
+<br>パスの削除、分割等の操作は、操作対象のパスを選択後、下記の操作ボタンで行う。
+<table>
+<tr><th class="border">delete</th>			<td class="border">パスを削除</td></tr>
+<tr><th class="border">cut</th>				<td class="border">パスを削除して、前後の点を直線で接続</td></tr>
+<tr><th class="border">split</th>			<td class="border">パスを直線に変換した後、中点で2分割</td></tr>
+<tr><th class="border">-&gt;c/-&gt;C</th>	<td class="border">パスをベジエ曲線に変換。大文字のボタンは、編集中のレイヤのすべてのパスを変換。</td></tr>
+<tr><th class="border">-&gt;l/-&gt;L</th>	<td class="border">パスを直線に変換。大文字のボタンは、編集中のレイヤのすべてのパスを変換。</td></tr>
+</table>
+</div>
+<br>
+<h2>属性の設定</h2>
+<div class="indent">
+属性の設定は <span class="label">Attribute</span> のテキストエリアに直接記載する。
+<br>色の値を記載する場合には、テキストエリアの下の、色に対応した値を表示する機能を参考にできる。
+<br><span class="button">[Default]</span> ボタンは属性を初期値に戻す。
+<br>
+<br>SVGには色々な属性がある。以下に、代表的なものをいくつか記載する。詳細は検索のこと。
+<table>
+<tr><th class="border">名前</th>				<th class="border">意味</td>					<th class="border">値</td></tr>
+<tr><th class="border">stroke</th>			<td class="border">線の色を指定</td>			<td class="border">色の値</td></tr>
+<tr><th class="border">stroke-width</th>	<td class="border">線の太さを指定</td>			<td class="border">数値</td></tr>
+<tr><th class="border">fill</th>			<td class="border">図形の塗りつぶしの色を指定</td>	<td class="border">色の値</td></tr>
+<tr><th class="border">opacity</th>			<td class="border">不透明度を指定</td>			<td class="border">0から1までの数値</td></tr>
+<tr><th class="border">stroke-linecap</th>	<td class="border">線の端の形状を指定</td>		<td class="border">定義された値</td></tr>
+<tr><th class="border">stroke-linejoin</th>	<td class="border">線の接続箇所の形状を指定</td>	<td class="border">定義された値</td></tr>
+</table>
+</div>
+<br>
+<h2>練習問題</h2>
+<div class="indent">
+<ol>
+<li>図形を描く<ol>直線を引く / 直線で囲んだ図形を描く / 図形を塗る</ol></li>
+<li>図形を修正する<ol>頂点を移動する / 頂点を増やす・減らす / 直線を曲線に変換する</ol></li>
+<li>レイヤを使う<ol>レイヤを追加・削除する / レイヤの順序を入れ替える / レイヤを分ける</ol></li>
+<li>トレースする</li>
+</ol>
+</div>
+</body>

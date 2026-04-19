@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>SVG Editor</title>
+		<style>
+			body { background: whitesmoke; line-height: 1.5; font-size: 100%; font-family: monospace; white-space: nowrap; }
+			table { border-collapse: collapse; }
+			td, th { border: solid 1px black; }
+			button { border: solid 1px black; text-shadow: 1px 1px 2px gray; }
+			textarea { tab-size: 4; }
+			
+			.layer { margin-bottom: 5px; }
+			.select	{ background-color: yellow; font-weight: bold; }
+			.data	{ background-color: white; }
+			.nodata	{ background-color: lightgray; }
+			
+			.layer td { width: 1.5em;  text-align: center; }
+			.layer .scroll { width: 2em; font-weight: bold; border: solid 1px; text-shadow: 1px 1px 2px gray; text-align: center; background-color: #fbbcf3;}
+			
+			.path { width: 100%; }
+			.path th, .path td { padding: 0px 3px 0px 3px; }
+
+			.layerControl button { width: 3em; margin: 0px 0px 0px 5px; background-color: #fbbcf3; }
+			.pathControl button	{ width: 100%; margin: 2px 0px 0px 2px; background-color: #ffffe0; }
+			.box { padding: 5px 0px 2px 0px;  border: solid 1px gray; }
+		</style>
+	</head>
+	<body>
+		<div style="display: flex; flex-direction: row; width: 100%; ">
+			<div style="display: flex; flex-direction: column; width: 40%; margin-left: 0.3em;">
+				<div><table id="layerTable" class="layer"></table></div>
+			</div>
+			<div style="display: flex; flex-direction: column; text-align: right; width: 43%; margin-left: 0.3em;">
+				<div class="layerControl">
+					<span id="zoomRatio" style="background-color: #a0ffa0; display: inline-block; padding: 3px 3px 0px 3px; margin-right: 5px;">x 1</span><!--
+					--><span class="box" style="display: inline-block; padding: 0px 3px 0px 0px; margin-right: 2px;">
+						<input id="dispLayerAll" 	     type="radio" name="dispLayer" checked><label for="dispLayerAll"        >All</label>
+						<input id="dispLayerLessOrEqual" type="radio" name="dispLayer"        ><label for="dispLayerLessOrEqual">0～</label>
+						<input id="dispLayerEqual"	     type="radio" name="dispLayer"        ><label for="dispLayerEqual"      >Current</label>
+					</span><!--
+					--><button id="layerLeft"><span style="display: inline-block; transform: rotate(-90deg);">&#9650;</span></button><!--
+					--><button id="layerRight"><span style="display: inline-block; transform: rotate(90deg);">&#9650;</span></button><!--
+					--><button id="layerAdd">Add</button><button id="layerIns">Ins</button><!--
+					--><button id="layerDup">Dup</button><button id="layerDel">Del</button>
+				</div>
+			</div>
+			<div class="pathControl" style="display: flex; flex-direction: column; width: 17%; margin-left: 0.3em;">
+				<button id="btnUndo">Undo (0)</button>
+			</div>
+		</div>
+		<div style="display: flex; flex-direction: row; width: 100%;">
+			<div style="display: flex; flex-direction: column; width: 46%;">
+				<div id="canvas"></div>
+			</div>
+			<div style="display: flex; flex-direction: column; margin-left: 0.5em; width: 37%;">
+				<table class="path"><thead><tr><th width="15%">No</th><th width="85%">Path</th></tr></thead><tbody id="tbody"></tbody></table>
+			</div>
+			<div class="pathControl" style="display: flex; flex-direction: column; width: 17%; margin-left: 0.3em;">
+				<button id="btnNew">New</button>
+				<br>
+				<button id="btnLoad">Load</button>
+				<button id="btnSave">Save</button>
+				<button id="btnSaveSvg">Save SVG</button>
+				<br>
+				Background file:
+				<input id="backgroundFile" value="">
+				<br>
+				<fieldset style="padding: 0px 2px 4px 2px; margin: 0px;">
+					<legend>Attribute</legend>
+					<div><textarea id="areaAttribute" spellcheck="false" style="padding: 2px; margin: 0px; width: 97%; height: 7em;"></textarea>
+					<div style="text-align: right;"><button id="btnDefault" style="width: 5em;">Default</button></div>
+				</fieldset>
+				<div class="box" style="display: flex; flex-direction: row;">
+					<span style="margin: 0px 4px 0px 2px; width: 30%;">Color</span>
+					<input id="colorChart" type="color" style="padding: 0px 0px 0px 0px; margin: 0px 4px 0px 1px; width: 30%; height: 22px; border: none;">
+					<input id="colorValue" value="#ffffff" disabled style="font-family: monospace; width: 40%; text-align: center;">
+				</div>	
+				<br>
+				<fieldset style="padding: 0px 0px 4px 0px; margin: 0px;">
+					<legend>Path</legend>
+					<div style="width: 97%;"><button id="btnDelete">delete</button></div>
+					<div style="width: 97%;"><button id="btnCut">cut</button></div>
+					<div style="width: 97%;"><button id="btnSplit">split</button></div>
+					<div style="width: 98%;">
+						<div style="display: flex; flex-direction: row;">
+							<button id="btnToC">-&gt; c</button><button id="btnToCGroup">-&gt; C</button>
+						</div>
+						<div style="display: flex; flex-direction: row;">
+							<button id="btnToL">-&gt; l</button><button id="btnToLGroup">-&gt; L</button>
+						</div>
+					</div>
+				</fieldset>
+			</div>
+		</div>
+		<noscript><div style="color: red;">このプログラムを実行するには、JavaScriptが実行できる環境が必要です。</div></noscript>
+		<script>
+		const ATTRIBUTE_DEFAULT = [['stroke-width', 16384/1024], ['stroke', 'black'], ['fill', 'none'], ['stroke-linecap', 'round']];
+		const MARKER			= { BEGIN: 0, END: 9, CTRL1: 1, CTRL2: 2, LINE: 99 };
+		const DISP_LAYER_MAX	= 20;
+		const LAYER_MAX			= 100;
+		const UNDO_SIZE			= 1024*1024;
+		const STORAGE_UNDO		= 'svgEditor.undo';
+		const SAVE_DEFAULT		= 'svgEditor_data.json';
+		const SAVE_SVG_DEFAULT	= 'output.svg';
+
+		const clearChildren = (element) => { while (element.firstChild) { element.removeChild(element.firstChild) } };
+		
+		function setAttributes(tag, attributes) { attributes.forEach((attribute) => tag.setAttribute(attribute[0], attribute[1])); }
+		function createElement(type, attributes = null) {
+			const element = document.createElement(type);
+			if (attributes != null) { setAttributes(element, attributes); }
+			return element;
+		}
+		function createSvgElement(type, attributes = null) {
+			const element = document.createElementNS('http://www.w3.org/2000/svg', type);
+			if (attributes != null) { setAttributes(element, attributes); }
+			return element;
+		}
+
+		class Canvas {
+			#ZOOM		= [16384, 8192, 4096, 2048, 1024, 512, 256, 128, 64];
+			#zoomIndex	= 0;
+			#lt			= [-this.#ZOOM[0]/2, -this.#ZOOM[0]/2];
+			
+			#getBase()				{ return this.#ZOOM[this.getZoomIndex()]; }
+			#getOuterFrameColor()	{ return 'gray'; }
+			#getGridStep()			{ return this.#getBase()/32; }
+			#getGridWidth()			{ return this.#getBase()/4096; }
+			#getGridColor()			{ return '#808080'; }
+			#getSelectWidth()		{ return this.#getBase()/256; }
+			#getSelectColor() 		{ return 'orange'; }
+			#getPaddingSize()		{ return this.#getBase()/128; }
+			#getMarkerSize()		{ return this.#getBase()/128; }
+			#getMarkerColor(type) {
+				switch (type) {
+					case MARKER.BEGIN:	return '#ff0000';
+					case MARKER.END:	return '#0000ff';
+					case MARKER.CTRL1:	return '#ff00ff';
+					case MARKER.CTRL2:	return '#00ffff';
+					case MARKER.LINE:	return '#008000';
+				}
+				return '#000000';
+			}
+			#createOuterFrame() {
+				const outerFrame = createSvgElement('g', [['fill', this.#getOuterFrameColor()], ['stroke', 'none']]);
+				const [l, t, w, h] = this.getViewLTWH();
+				const p = this.#getPaddingSize();
+				outerFrame.appendChild(createSvgElement('rect', [['x', l-p],	['y', t-p],	['width', w+p*2],	['height', p]]));
+				outerFrame.appendChild(createSvgElement('rect', [['x', l-p],	['y', t+h],	['width', w+p*2],	['height', p]]));
+				outerFrame.appendChild(createSvgElement('rect', [['x', l-p],	['y', t-p],	['width', p],		['height', h+p*2]]));
+				outerFrame.appendChild(createSvgElement('rect', [['x', l+w],	['y', t-p],	['width', p],		['height', h+p*2]]));
+				return outerFrame;
+			}
+			#setLT([x,y]) {
+				this.#lt = [
+					Math.min(this.#ZOOM[0]/2-this.#ZOOM[this.getZoomIndex()], Math.max(-this.#ZOOM[0]/2, x)),
+					Math.min(this.#ZOOM[0]/2-this.#ZOOM[this.getZoomIndex()], Math.max(-this.#ZOOM[0]/2, y))
+				];
+			}
+
+			getZoomIndex() { return this.#zoomIndex; }
+			setZoomIndex(index) {
+				this.#zoomIndex = Math.min(this.#ZOOM.length-1, Math.max(0, index));
+				this.#setLT(this.#lt);
+				document.querySelector('#zoomRatio').textContent = `x ${2**(this.#zoomIndex)}`;
+			}
+			zoom(direction)	{ this.setZoomIndex(this.getZoomIndex() + direction); }
+			getWorldLTWH()	{ return [-this.#ZOOM[0]/2, -this.#ZOOM[0]/2, this.#ZOOM[0], this.#ZOOM[0]]; }
+			getViewLTWH()	{ return [this.#lt[0], this.#lt[1], this.#getBase(), this.#getBase()]; }
+			getCanvasSvg() {
+				const [l,t,w,h] = this.getViewLTWH();
+				const p = this.#getPaddingSize();
+				const svg = createSvgElement('svg', [['width', '100%'], ['height', '100%'], ['viewBox', `${l-p} ${t-p} ${w+p*2} ${h+p*2}`]]);
+				const clip = createSvgElement('clipPath', [['id', 'clip']]);
+				clip.appendChild(createSvgElement('rect', [['x', l], ['y', t], ['width', w], ['height', h]]));
+				svg.appendChild(clip);
+				return svg;
+			}
+			normalize([x,y]) {
+				const [vl,vt,vw,vh] = this.getViewLTWH();
+				return [vl+Math.trunc(x+0.5), vt+Math.trunc(y+0.5)];
+			}
+			getFrame() {
+				const frame = createSvgElement('g');
+				frame.appendChild(this.#createOuterFrame());
+				return frame;
+			}
+			getMarker(type, id, [x,y], selected) {
+				const s = canvas.#getMarkerSize();
+				let attr = [
+					['id', id], ['stroke', selected?this.#getSelectColor():'black'], ['stroke-width', selected?this.#getSelectWidth():2],
+					['fill', this.#getMarkerColor(type)]
+				];
+				if		(type == MARKER.BEGIN || type == MARKER.END)	{ attr.push(['points', `${x-s},${y-s} ${x+s},${y-s} ${x+s},${y+s} ${x-s},${y+s}`]); }
+				else if (type == MARKER.CTRL1 || type ==  MARKER.CTRL2) { attr.push(['points', `${x},${y-s} ${x-s},${y+s} ${x+s},${y+s}`]); }
+				return createSvgElement('polygon', attr);
+			}
+			getMarkerLine([x1,y1], [x2,y2], selected) {
+				return createSvgElement('line', [
+					['x1', x1], ['y1', y1], ['x2', x2], ['y2', y2], ['stroke', this.#getMarkerColor(MARKER.LINE)],
+					['stroke-width', this.#getSelectWidth()/(selected?2:8)]
+				]);
+			}
+			getGrids() {
+				const [l, t, w, h] = this.getViewLTWH();
+				const step = this.#getGridStep();
+				const grid = createSvgElement('g', [['stroke-width', this.#getGridWidth()], ['stroke', this.#getGridColor()]]);
+				for (let i = step; i < w; i += step) {
+					const line = createSvgElement('line', [['x1', l+i], ['y1', t], ['x2', l+i], ['y2', t+h]]);
+					if (l+i == 0) { setAttributes(line, [['stroke', 'red'], ['stroke-width', this.#getGridWidth()*2]]); }
+					grid.appendChild(line);
+				}
+				for (let i = step; i < h; i += step) {
+					const line = createSvgElement('line', [['x1', l], ['y1', t+i], ['x2', l+w], ['y2', t+i]]);
+					if (t+i == 0) { setAttributes(line, [['stroke', 'red'], ['stroke-width', this.#getGridWidth()*2]]); }
+					grid.appendChild(line);
+				}
+				return grid;
+			}
+			center([x,y]) {
+				if (this.getZoomIndex == 0) { return; }
+				const scale = this.#ZOOM[this.getZoomIndex()];
+				const adjust = scale/32;
+				const left = Math.trunc((x-scale/2)/adjust+0.5)*adjust;
+				const top  = Math.trunc((y-scale/2)/adjust+0.5)*adjust;
+				this.#setLT([left, top]);
+			}
+		};
+		let canvas = new Canvas();
+
+		let layerList		= [{attribute: structuredClone(ATTRIBUTE_DEFAULT), path:[]}];
+		let layerIndex		= 0;
+		let pathIndex		= -1;
+		let startPoint 		= null;
+		let selectedElement	= null;
+		let selectedPath	= null;
+		let undoBuffer		= [JSON.stringify({ layerList: [{attribute: structuredClone(ATTRIBUTE_DEFAULT), path:[]}], pathIndex: -1, layerIndex: 0, zoomIndex: 0 })];
+		
+		let shiftKey = false;
+		let ctrlKey = false;
+		function keyDown(ev)	{ shiftKey = ev.shiftKey;  ctrlKey = ev.ctrlKey; show(); }
+		function keyUp(ev)		{ shiftKey = false; ctrlKey = false; show(); }
+
+		function refreshUndoButton() { document.querySelector('#btnUndo').textContent = `Undo (${undoBuffer.length-1})`; }
+		function clearUndo() {
+			undoBuffer = [JSON.stringify({ layerList: [{attribute: structuredClone(ATTRIBUTE_DEFAULT), path:[]}], pathIndex: -1, layerIndex: 0, zoomIndex: 0 })];
+			localStorage.removeItem(STORAGE_UNDO);
+		}
+		function restore(text) {
+			const jsonObject = JSON.parse(text);
+			layerList	= jsonObject.layerList;
+			pathIndex	= jsonObject.pathIndex;
+			canvas.setZoomIndex(jsonObject.zoomIndex);
+			setCurrentLayer(jsonObject.layerIndex);
+		}
+		function restoreUndo() {
+			const jsonObject = JSON.parse(localStorage.getItem(STORAGE_UNDO));
+			if (jsonObject == null) { clearUndo(); return; }
+			undoBuffer = jsonObject.undoBuffer;
+			if (undoBuffer.length != 0) { restore(undoBuffer[undoBuffer.length-1]); }
+			refreshUndoButton();
+		}
+		function pushUndo() {
+			const currentLayerList = JSON.stringify({layerList: layerList});
+			const latestLayerList = JSON.stringify(JSON.parse(undoBuffer[undoBuffer.length-1]).layerList);
+			if (currentLayerList == latestLayerList) { return; }
+
+			let latestText = JSON.stringify({ layerList: layerList, pathIndex: pathIndex, layerIndex: layerIndex, zoomIndex: canvas.getZoomIndex() });
+			if (latestText > UNDO_SIZE - 100) {
+				console.log('Cannot use undo. Too large data');
+				clearUndo();
+				refreshUndoButton();
+				return;
+			}
+			undoBuffer.push(latestText);
+			let text = JSON.stringify({undoBuffer: undoBuffer});
+			if (text.length > UNDO_SIZE) {
+				undoBuffer.shift();
+				text = JSON.stringify({undoBuffer: undoBuffer});
+			}
+//			console.log('Undo size: ' + text.length);
+			localStorage.setItem(STORAGE_UNDO, text);
+			refreshUndoButton();
+		}
+		function undo() {
+			if (undoBuffer.length == 0) { throw new Error(); }
+			if (undoBuffer.length == 1) { return ; }
+			restore(undoBuffer[undoBuffer.length-2]);
+			undoBuffer.pop();
+			localStorage.setItem(STORAGE_UNDO, JSON.stringify({undoBuffer: undoBuffer}));
+			refreshUndoButton();
+			show();
+		}
+		
+		function updateAreaAttribute() {
+			let str = '';
+			if (layerIndex >= 0) { layerList[layerIndex].attribute.forEach((entry) => str += entry[0] + ': ' + entry[1] + '\n'); }
+			document.querySelector('#areaAttribute').value = str;
+		}
+		function updateLayerTable(leftIndex, index) {
+			const layerTable = document.querySelector('#layerTable');
+			clearChildren(layerTable);
+			layerTable.appendChild(createLayerRow(leftIndex, index));
+			updateAreaAttribute();
+		}
+		function getDispLayerLeft() {
+			const layerTable = document.querySelector('#layerTable');
+			let index = (layerTable.children.length > 0 && layerTable.children[0].children.length > 2)?Number(layerTable.children[0].children[2].textContent):0;
+			if (index < 0 || index >= layerList.length) { index = 0; }
+			return index;
+		}
+		function createLayerRow(leftIndex, index) {
+			const tr = document.createElement('tr');
+			const td0 = createElement('td', [['class', (index < 0)?'select':'data']]);
+			td0.textContent = '-';
+			td0.addEventListener('click', () => { setCurrentLayer(-1); show(); });
+			tr.appendChild(td0);
+			
+			const tdLeft = createElement('td', [['class', 'scroll']]);
+			tdLeft.textContent = '<';
+			tdLeft.addEventListener('click', () => scrollLayerTable(-1));
+			tr.appendChild(tdLeft);
+
+			for (let i = leftIndex; i < layerList.length && i < leftIndex + DISP_LAYER_MAX; ++i) {
+				const td = createElement('td', [['class', (i == index)?'select':(layerList[i].path.length != 0)?'data':'nodata']]);
+				td.textContent = i;
+				td.addEventListener('click', (ev) => { setCurrentLayer(Number(ev.target.textContent)); show(); });
+				tr.appendChild(td);
+			}
+
+			const tdRight = createElement('td', [['class', 'scroll']]);
+			tdRight.textContent = '>';
+			tdRight.addEventListener('click', () => scrollLayerTable(1));
+			tr.appendChild(tdRight);
+			return tr;
+		}
+		function scrollLayerTable(direction) {
+			let leftIndex = getDispLayerLeft() + direction;
+			leftIndex = Math.max(0, Math.min(layerList.length - DISP_LAYER_MAX, leftIndex));
+			layerIndex = (layerIndex < leftIndex)?leftIndex:(layerIndex >= leftIndex+DISP_LAYER_MAX)?leftIndex+DISP_LAYER_MAX-1:layerIndex;
+			updateLayerTable(leftIndex, layerIndex);
+		}
+		function setCurrentLayer(index) {
+			if (layerIndex != index || index < 0) {
+				pathIndex		= -1;
+				startPoint 		= null;
+				selectedElement	= null;
+				selectedPath	= null;
+			}
+			layerIndex = index;
+			let leftIndex = getDispLayerLeft();
+			if (index >= 0) {
+				if (index < leftIndex) { leftIndex = index; }
+				else if (index >= leftIndex+DISP_LAYER_MAX) { leftIndex = index-DISP_LAYER_MAX+1; }
+				leftIndex = Math.max(0, Math.min(layerList.length - DISP_LAYER_MAX, leftIndex));
+			}
+			updateLayerTable(leftIndex, index);
+		}
+		function layerAdd() {
+			if (layerList.length >= LAYER_MAX) { return; }
+			layerList.push({attribute: structuredClone(ATTRIBUTE_DEFAULT), path:[]});
+			setCurrentLayer(layerList.length-1);
+			show(true);
+		}
+		function layerIns() {
+			if (layerList.length >= LAYER_MAX) { return; }
+			layerList.splice(layerIndex, 0, {attribute: structuredClone(ATTRIBUTE_DEFAULT), path:[]});
+			setCurrentLayer(layerIndex);
+			show(true);
+		}
+		function layerDup() {
+			if (layerIndex < 0) { return; }
+			if (layerList.length >= LAYER_MAX) { return; }
+			const tmp = structuredClone(layerList[layerIndex]);
+			layerList.splice(layerIndex, 0, tmp);
+			setCurrentLayer(layerIndex);
+			show(true);
+		}
+		function layerDelete() {
+			if (layerIndex < 0 || layerList.length <= 1) { return; }
+			layerList.splice(layerIndex, 1);
+			setCurrentLayer((layerIndex <= 0)?0:layerIndex-1);
+			show(true);
+		}
+		function layerMove(direction) {
+			if (layerIndex < 0) { return; }
+			const targetLayer = layerIndex + direction;
+			if (targetLayer < 0 || targetLayer > layerList.length-1) { return; }
+			const start = Math.min(layerIndex, targetLayer);
+			const tmp1 = layerList[start];
+			const tmp2 = layerList[start+1];
+			layerList.splice(start, 2, tmp2, tmp1); 
+			setCurrentLayer(targetLayer);
+			show(true);
+		}
+		
+		function setStartPoint(p)			{ startPoint = p; setSelectedElement(null); }
+		function getStartPoint()			{ return startPoint; }
+		function setSelectedElement(elem)	{ selectedElement = elem; }
+		function getSelectedElement()		{ return selectedElement; }
+		function selectElement(elem) {
+			startPoint = null;
+			setSelectedElement(elem);
+			if (layerIndex < 0 || getSelectedElement() == null) { selectedPath = null; return; }
+			const [rowIndex] = getSelectedElement().id.split('-');
+			pathIndex = rowIndex;
+			selectedPath = structuredClone(layerList[layerIndex].path[rowIndex]);
+		}
+		function moveElement(p) {
+			if (layerIndex < 0 || getSelectedElement() == null) { return; }
+			const layer = layerList[layerIndex];
+			const [r,c] = getSelectedElement().id.split('-');
+			const rowIndex = Number(r);
+			const colIndex = Number(c);
+			if (colIndex == MARKER.BEGIN) {
+				const index = (rowIndex != getGroupStartPathIndex(rowIndex))?rowIndex-1:getGroupEndPathIndex(rowIndex);
+				if (isSamePoint(getFirstPoint(layer.path[rowIndex]), getLastPoint(layer.path[index]))) {
+					layer.path[index] = changePoint(layer.path[index], MARKER.END, p);
+				}
+			}
+			else if (colIndex == MARKER.END) {
+				const index = (rowIndex != getGroupEndPathIndex(rowIndex))?rowIndex+1:getGroupStartPathIndex(rowIndex);
+				if (isSamePoint(getLastPoint(layer.path[rowIndex]), getFirstPoint(layer.path[index]))) {
+					layer.path[index] = changePoint(layer.path[index], MARKER.BEGIN, p);
+				}
+			}
+			layer.path[rowIndex] = changePoint(layer.path[rowIndex], colIndex, p);
+		}
+		function cancelMoveElement() {
+			if (layerIndex < 0 || getSelectedElement() == null) { return; }
+			const [rowIndex] = getSelectedElement().id.split('-');
+			layerList[layerIndex].path[rowIndex] = selectedPath;
+		}
+
+		function disassemble(path) {
+			const prim = [];
+			let tmp = path;
+			const pattern = /^\s*([MLCQ]?[\s,]*-?\d+[\s,]+-?\d+)(.*)/;
+			while (true) {
+				let tmp2 = tmp.match(pattern);
+				if (tmp2 == null) { break; }
+				prim.push(tmp2[1]);
+				tmp = tmp2[2];
+			}
+			return prim;
+		}
+		function getPoints(path) {
+			const prim = disassemble(path);
+			const points = [];
+			const pattern = /(-?\d+)[\s,]+(-?\d+)/;
+			prim.forEach((p) => { const tmp = p.match(pattern); points.push([Number(tmp[1]), Number(tmp[2])]); });
+			return points;
+		}
+		function getFirstPoint(path)	{ return getPoints(path)[0]; }
+		function getLastPoint(path)		{ const points = getPoints(path); return points[points.length-1]; }
+		function isSamePoint([x1,y1], [x2,y2])	{ return x1 == x2 && y1 == y2; }
+		function changePoint(path, colIndex, [x,y]) {
+			const prim = disassemble(path);
+			const pattern = /(-?\d+[\s,]+-?\d+)/;
+			const index = (colIndex == MARKER.END)?prim.length-1:colIndex;
+			prim[index] = prim[index].replace(pattern, `${x},${y}`);
+			let ret = '';
+			for (let i = 0; i < prim.length; ++i) { ret += prim[i] + ((i != prim.length-1)?' ':''); }
+			return ret;
+		}
+
+		function createSvgLayer(layer) {
+			function getCompressedPath(list) {
+				function deleteFirstPoint(path) {
+					const prim = disassemble(path);
+					let ret = '';
+					for (let i = 1; i < prim.length; ++i) { ret += prim[i] + ((i != prim.length-1)?' ':''); }
+					return ret;
+				}
+				if (list.length == 0) { return ''; }
+				let path = list[0];
+				let lp = getLastPoint(list[0]);
+				for (let i = 1; i < list.length; ++i) {
+					const fp = getFirstPoint(list[i]);
+					path += ' ' + (isSamePoint(fp, lp)?deleteFirstPoint(list[i]).trim():list[i]);
+					lp = getLastPoint(list[i]);
+				}
+				return path;
+			}
+			const pathStr = getCompressedPath(layer.path);
+			if (pathStr.length == 0) { return null; }
+			const g = createSvgElement('g', layer.attribute);
+			g.innerHTML += '\n    ';
+			g.appendChild(createSvgElement('path', [['d', pathStr]]));
+			g.innerHTML += '\n  ';
+			return g;
+		}
+		function createSvg() {
+			let [left, top, width, height] = canvas.getViewLTWH();
+			const WIDTH_PADDING = Math.trunc(width/20);
+			const HEIGHT_PADDING = Math.trunc(height/20);
+			const svg = createSvgElement('svg', [
+				['xmlns', 'http://www.w3.org/2000/svg'], ['width', '100%'], ['height', '100%'],
+				['viewBox', `${left-WIDTH_PADDING} ${top-HEIGHT_PADDING} ${width+WIDTH_PADDING*2} ${height+HEIGHT_PADDING*2}`]
+			]);
+			svg.innerHTML += '\n  ';
+			for (let l = 0; l < layerList.length; ++l) {
+				const g = createSvgLayer(layerList[l]);
+				if (g != null) {
+					svg.appendChild(g);
+					svg.innerHTML += ((l == layerList.length-1)?'':'\n  ');
+				}
+			}
+			svg.innerHTML +='\n';
+			return svg;
+		}
+		function select(ev) {
+			if (ev.shiftKey) { return; }
+			if (ev.button != 0) { return; }
+			ev.stopImmediatePropagation();
+			selectElement(ev.target);
+		}
+
+		function show(store) {
+			function showTable() {
+				const tbody = document.querySelector('#tbody');
+				clearChildren(tbody);
+				if (layerIndex < 0) { return; }
+				const layer = layerList[layerIndex];
+				for (let i = 0; i < layer.path.length; ++i) {
+					const tr = createElement('tr', (i == pathIndex)?[['class', 'select']]:[]);
+					tr.addEventListener('click', (ev) => { pathIndex = i; show(); });
+					const td1 = createElement('td', [['align', 'right']]);
+					td1.textContent = i+1;
+					tr.appendChild(td1);
+					const td2 = createElement('td', []);
+					td2.textContent = layer.path[i];
+					tr.appendChild(td2);
+					tbody.appendChild(tr);
+				}
+			}
+			function showSvg() {
+				function addMarkers(g, index, selected) {
+					if (layerIndex < 0) { return; }
+					const points = getPoints(layerList[layerIndex].path[index]);
+					const markers = [];
+					markers.push(canvas.getMarker(MARKER.BEGIN,	`${index}-${MARKER.BEGIN}`, points[0],					selected));
+					markers.push(canvas.getMarker(MARKER.END,	`${index}-${MARKER.END}`,	points[points.length-1],	selected));
+					if (points.length == 4) {
+						g.appendChild(canvas.getMarkerLine(points[0], points[1], selected));
+						g.appendChild(canvas.getMarkerLine(points[2], points[points.length-1], selected));
+						markers.push(canvas.getMarker(MARKER.CTRL1,	`${index}-${MARKER.CTRL1}`, points[1], selected));
+						markers.push(canvas.getMarker(MARKER.CTRL2,	`${index}-${MARKER.CTRL2}`, points[2], selected));
+					}
+					if (!shiftKey && !ctrlKey) { 
+						markers.forEach((elem) => {
+							elem.addEventListener('mousedown', select);
+							g.appendChild(elem);
+						});
+					}
+				}
+				const canvasTag = document.querySelector('#canvas');
+				clearChildren(canvasTag);
+				const svg = canvas.getCanvasSvg();
+				if (layerIndex >= 0) {
+					const backgroundFile = document.querySelector('#backgroundFile').value;
+					if (backgroundFile.includes('.')) {
+						const [l,t,w,h] = canvas.getWorldLTWH();
+						const back = createSvgElement('image', [['href', backgroundFile], ['x', l], ['y', t], ['width', w], ['height', h]]);
+						back.addEventListener('error', () => svg.removeChild(back));
+						if (back != null) { svg.appendChild(back); }
+					}
+					svg.appendChild(canvas.getGrids());
+				}
+				const lowLimit  = (layerIndex >= 0 && document.querySelector('#dispLayerEqual').checked)?layerIndex:0;
+				const highLimit = (layerIndex < 0  || document.querySelector('#dispLayerAll').checked)?layerList.length-1:layerIndex;
+				for (let l = lowLimit; l <= highLimit; ++l) {
+					const g = createSvgLayer(layerList[l]);
+					if (g != null) {
+						g.setAttribute('clip-path', 'url(#clip)');
+						svg.appendChild(g);
+					}
+				}
+				if (layerIndex >= 0) {
+					const layer = layerList[layerIndex];
+					const g = createSvgElement('g', [
+						['fill', 'none'], ['clip-path', 'url(#clip)']
+					]);
+					for (let i = 0; i < layer.path.length; ++i) {
+						if (i != pathIndex) { addMarkers(g, i, false); }
+					}
+					// draw pathIndex last
+					if (pathIndex >= 0 && pathIndex < layer.path.length) { addMarkers(g, pathIndex, true); }
+					svg.appendChild(g);
+				}
+				canvasTag.appendChild(svg);
+				const frame = canvas.getFrame();
+				svg.appendChild(frame);
+			}
+			if (store) { pushUndo(); }
+			showSvg();
+			showTable();
+		}
+
+		function calc([x,y]) {
+			const rect = document.querySelector('#canvas').getBoundingClientRect();
+			const [l,t,w,h] = canvas.getViewLTWH();
+			return canvas.normalize([(x-rect.x)*w /rect.width, (y-rect.y)*h/rect.height]);
+		}
+		function getGroupStartPathIndex(startIndex) {
+			if (layerIndex < 0 || startIndex < 0) { return null; }
+			const layer = layerList[layerIndex];
+			let top = getFirstPoint(layer.path[startIndex]);
+			for (let index = startIndex - 1; index >= 0; --index) {
+				if (!isSamePoint(top, getLastPoint(layer.path[index]))) { return index+1; }
+				top = getFirstPoint(layer.path[index]);
+			}
+			return 0;
+		}
+		function getGroupEndPathIndex(startIndex) {
+			if (layerIndex < 0 || startIndex < 0) { return null; }
+			const layer = layerList[layerIndex];
+			let bottom = getLastPoint(layer.path[startIndex]);
+			for (let index = startIndex + 1; index < layer.path.length; ++index) {
+				if (!isSamePoint(bottom, getFirstPoint(layer.path[index]))) { return index-1; }
+				bottom = getLastPoint(layer.path[index]);
+			}
+			return layer.path.length-1;
+		}
+		function getGroupStartPoint(startIndex) {
+			if (layerIndex < 0 || startIndex < 0) { return null; }
+			const groupStartPathIndex = getGroupStartPathIndex(startIndex);
+			if (groupStartPathIndex == null) { return null; }
+			return getFirstPoint(layerList[layerIndex].path[groupStartPathIndex]);
+		}
+		function getGroupEndPoint(startIndex) {
+			if (layerIndex < 0) { return null; }
+			const groupEndPathIndex = getGroupEndPathIndex(startIndex);
+			if (groupEndPathIndex == null) { return null; }
+			return getLastPoint(layerList[layerIndex].path[groupEndPathIndex]);
+		}
+
+		function newCanvas() {
+			if (undoBuffer.length > 1 && !confirm('The image being created will be lost')) { return; }
+			layerList = [{attribute: structuredClone(ATTRIBUTE_DEFAULT), path:[]}];
+			clearUndo();
+			setCurrentLayer(0);
+			refreshUndoButton();
+			canvas = new Canvas();
+			show();
+		}
+		async function saveText(fileHandle, text) {
+			const writable = await fileHandle.createWritable();
+			writable.write(text);
+			await writable.close();
+		}
+		async function save() {
+			try {
+				const text = JSON.stringify({ layerList: layerList, pathIndex: -1, layerIndex: 0, zoomIndex: 0 }, null, 4);
+				const file = await window.showSaveFilePicker({ suggestedName: SAVE_DEFAULT });
+				if (!file.name.endsWith('.json')) { alert('Extention should be ".json".'); return; }
+				await saveText(file, text);
+			}
+			catch (ex) {
+				console.log(ex.message);
+			}
+		}
+		async function load() {
+			if (undoBuffer.length > 1 && !confirm('The image being created will be lost')) { return; }
+			try {
+				fileHandle = await window.showOpenFilePicker();
+				const file = await fileHandle[0].getFile();
+				if (!file.name.endsWith('.json')) { alert('Extention should be ".json".'); return; }
+ 				const reader = new FileReader();
+				reader.addEventListener('load', () => {
+					setCurrentLayer(0);
+					clearUndo();
+					restore(reader.result);
+					show(true);
+				});
+				reader.readAsText(file);
+			}
+			catch (ex) {
+				console.log(ex.message);
+			}
+		}			
+		async function saveSvg() {
+			try {
+				await saveText(await window.showSaveFilePicker({ suggestedName: SAVE_SVG_DEFAULT }), createSvg().outerHTML);
+			}
+			catch (ex) {
+				console.log(ex.message);
+			}
+		}
+		
+		function attributeReflect() {
+			if (layerIndex < 0) { return; }
+			const str = document.querySelector('#areaAttribute').value;
+			const attr = [];
+			str.split('\n').forEach((line) => {
+				const tmp = line.match(/^\s*([^:]+)\s*:\s*([^\s]+)\s*$/);
+				if (tmp != null) { attr.push([tmp[1],tmp[2]]); } 
+			});
+			layerList[layerIndex].attribute = attr;
+			show(true);
+		}
+		function attributeDefault() {
+			layerList[layerIndex].attribute = structuredClone(ATTRIBUTE_DEFAULT);
+			updateAreaAttribute();
+			attributeReflect();
+		}
+
+		function deleteItemList() {
+			if (layerIndex < 0 || pathIndex < 0) { return; }
+			const layer = layerList[layerIndex];
+			layer.path.splice(pathIndex, 1);
+			pathIndex = Math.min(pathIndex, layer.path.length-1);
+			show(true);
+		}
+		function cutItemList() {
+			if (layerIndex < 0 || pathIndex < 0) { return; }
+			const layer = layerList[layerIndex];
+			if (pathIndex == 0 || pathIndex == layer.path.length-1
+				|| !isSamePoint(getLastPoint(layer.path[pathIndex-1]), getFirstPoint(layer.path[pathIndex]))) {
+				deleteItemList();
+				return;
+			}
+			layer.path.splice(pathIndex, 1);
+			layer.path[pathIndex] = changePoint(layer.path[pathIndex], 0, getLastPoint(layer.path[pathIndex-1]));
+			show(true);
+		}
+		function splitItemList() {
+			if (layerIndex < 0 || pathIndex < 0) { return; }
+			const layer = layerList[layerIndex];
+			const path = layer.path[pathIndex];
+			if (getPoints(path).length == 1) { return; }
+			const [fx,fy] = getFirstPoint(path);
+			const [lx,ly] = getLastPoint(path);
+			const [mx,my] = [Math.trunc((fx+lx)/2), Math.trunc((fy+ly)/2)];
+			layer.path.splice(pathIndex, 1, `M ${fx},${fy} L ${mx},${my}`, `M ${mx},${my} L ${lx},${ly}`);
+			show(true);
+		}
+		function toCItemList(full) {
+			function toC(path) {
+				if (path.indexOf('C') >= 0) { return path; }
+				const [fx,fy] = getFirstPoint(path);
+				const [lx,ly] = getLastPoint(path);
+				return `M ${fx},${fy} C ${fx},${fy} ${lx},${ly} ${lx},${ly}`;
+			}
+			if (layerIndex < 0 || (!full && pathIndex < 0)) { return; }
+			const layer = layerList[layerIndex];
+			if (full) {
+				for (let i = 0; i < layer.path.length; ++i) { layer.path[i] = toC(layer.path[i]); }
+			}
+			else {
+				layer.path[pathIndex] = toC(layer.path[pathIndex]);
+			}
+			show(true);
+		}
+		function toLItemList(full) {
+			function toL(path) {
+				if (path.indexOf('L') >= 0) { return path; }
+				const [fx,fy] = getFirstPoint(path);
+				const [lx,ly] = getLastPoint(path);
+				return `M ${fx},${fy} L ${lx},${ly}`;
+			}
+			if (layerIndex < 0 || (!full && pathIndex < 0)) { return; }
+			const layer = layerList[layerIndex];
+			if (full) {
+				for (let i = 0; i < layer.path.length; ++i) { layer.path[i] = toL(layer.path[i]); }
+			}
+			else {
+				layer.path[pathIndex] = toL(layer.path[pathIndex]);
+			}
+			show(true);
+		}
+
+		function resetMouseSelection() {
+			cancelMoveElement();
+			selectElement(null);
+			setStartPoint(null);
+			show();
+		}
+		function mouseDown(ev) {
+			if (ev.button == 2) {
+				const p = calc([ev.clientX, ev.clientY]);
+				canvas.center(p);
+				show();
+				return;
+			}
+			if (ev.button != 0 || ev.shiftKey || ev.ctrlKey) { return; }
+			if (ev.shiftKey || ev.ctrlKey) { return; }
+			const p = calc([ev.clientX, ev.clientY]);
+			if (p == null) { resetMouseSelection(); return; }
+			setStartPoint(p);
+		}
+		function mouseLeave(ev) { resetMouseSelection(); }
+		function popPath() {
+			if (layerIndex < 0) { return; }
+			const layer = layerList[layerIndex];
+			layer.path.pop();
+			pathIndex = layer.path.length-1;
+		}
+		function pushPath(path) {
+			if (layerIndex < 0) { return; }
+			const layer = layerList[layerIndex];
+			const pattern = /^M[\s,]*-?\d+[\s,]+-?\d+$/;
+			if (layer.path.length != 0 && layer.path[layer.path.length-1].match(pattern)) { popPath(); }
+			layer.path.push(path);
+			pathIndex = layer.path.length-1;
+		}
+		function mouseUp(ev) {
+			if (layerIndex < 0) { return; }
+			const layer = layerList[layerIndex];
+			const element = getSelectedElement();
+			if (element == null) {
+				if (ev.shiftKey || ev.ctrlKey) {
+					if (pathIndex < 0) { return; }
+					setStartPoint(getLastPoint(layer.path[layer.path.length-1]));
+				}
+				const p1 = getStartPoint();
+				if (p1 == null) { return; }
+				if (ev.button == 0) {
+					const p = calc([ev.clientX, ev.clientY]);
+					if (p == null) { resetMouseSelection(); return; }
+					const p2 = (ev.ctrlKey)?getGroupStartPoint(pathIndex):p;
+					if (p2 == null) { return; }
+					pushPath(isSamePoint(p1, p2)?`M ${p1[0]},${p1[1]}`:`M ${p1[0]},${p1[1]} L ${p2[0]},${p2[1]}`);
+				}
+				setStartPoint(null);
+				show(true);
+			}
+			else {
+				show(true);
+				selectElement(null);
+			}
+		}
+		function mouseMove(ev) {
+			const p2 = calc([ev.clientX, ev.clientY]);
+			if (p2 == null) { resetMouseSelection(); return; }
+			const element = getSelectedElement();
+			if (ev.shiftKey || element == null) {
+				const p1 = getStartPoint();
+				if (p1 == null) { return; }
+				pushPath(`M ${p1[0]},${p1[1]} L ${p2[0]},${p2[1]}`);
+				show();
+				popPath();
+			}
+			else {
+				moveElement(p2);
+				show();
+			}
+		}
+		function mouseWheel(ev) {
+			const p = calc([ev.clientX, ev.clientY]);
+			canvas.zoom((ev.wheelDelta < 0)?-1:1);
+			canvas.center(p);
+			show();
+		}
+		function handleTab(ev) {
+			if (ev.keyCode !== 9) { return; }
+			if (ev.preventDefault) { ev.preventDefault(); }
+			const elem = ev.target;
+			const start = elem.selectionStart;
+			elem.value	= elem.value.substring(0, start) + '\t' + elem.value.substring(elem.selectionEnd);
+			elem.selectionStart = elem.selectionEnd = start + 1;
+			return false;
+		}
+
+		function main() {
+			setCurrentLayer(0);
+			
+			document.addEventListener('keydown',	keyDown);
+			document.addEventListener('keyup',		keyUp);
+
+			const canvas = document.querySelector('#canvas');
+			canvas.oncontextmenu = () => false;
+			canvas.addEventListener('mousedown',	mouseDown);
+			canvas.addEventListener('mouseleave',	mouseLeave);
+			canvas.addEventListener('mouseup',		mouseUp);
+			canvas.addEventListener('mousemove',	mouseMove);
+			canvas.addEventListener("wheel", 		mouseWheel);
+
+			document.querySelector('#dispLayerAll')			.addEventListener('click', show);
+			document.querySelector('#dispLayerLessOrEqual')	.addEventListener('click', show);
+			document.querySelector('#dispLayerEqual')		.addEventListener('click', show);
+			
+			document.querySelector('#layerAdd')		.addEventListener('click', layerAdd);
+			document.querySelector('#layerIns')		.addEventListener('click', layerIns);
+			document.querySelector('#layerDup')		.addEventListener('click', layerDup);
+			document.querySelector('#layerDel')		.addEventListener('click', layerDelete);
+			document.querySelector('#layerLeft')	.addEventListener('click', () => layerMove(-1));
+			document.querySelector('#layerRight')	.addEventListener('click', () => layerMove(1));
+			
+			document.querySelector('#btnUndo')		.addEventListener('click', undo);
+			document.querySelector('#btnNew')		.addEventListener('click', newCanvas);
+			document.querySelector('#btnLoad')		.addEventListener('click', load);
+			document.querySelector('#btnSave')		.addEventListener('click', save);
+			document.querySelector('#btnDefault')	.addEventListener('click', attributeDefault);
+			document.querySelector('#colorValue').value = document.querySelector('#colorChart').value;
+			document.querySelector('#colorChart')	.addEventListener('input', () => document.querySelector('#colorValue').value = document.querySelector('#colorChart').value);
+
+			document.querySelector('#btnDelete')	.addEventListener('click', deleteItemList);
+			document.querySelector('#btnCut')		.addEventListener('click', cutItemList);
+			document.querySelector('#btnSplit')		.addEventListener('click', splitItemList);
+			document.querySelector('#btnToC')		.addEventListener('click', () => toCItemList(false));
+			document.querySelector('#btnToCGroup')	.addEventListener('click', () => toCItemList(true));
+			document.querySelector('#btnToL')		.addEventListener('click', () => toLItemList(false));
+			document.querySelector('#btnToLGroup')	.addEventListener('click', () => toLItemList(true));
+			document.querySelector('#btnSaveSvg')	.addEventListener('click', saveSvg);
+						
+			document.querySelector('#areaAttribute')	.addEventListener('mouseleave', attributeReflect);
+			document.querySelector('#areaAttribute')	.addEventListener('keydown', handleTab);
+			document.querySelector('#backgroundFile')	.addEventListener('mouseleave', show);
+		}
+
+		main();
+		restoreUndo();
+		show();
+		</script>
+	</body>
+</html>

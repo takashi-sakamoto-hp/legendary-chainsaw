@@ -1,0 +1,664 @@
+<!DOCTYPE html PUBLIC "-//w3c//dtd html 4.0 transitional//en">
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">
+	<meta name="Author" content="Sakamoto Takashi">
+	<title>SVGで遊ぶ - 飛び回る手裏剣</title>
+	<style>
+		body { padding: 5px 10px 5px 10px; line-height: 1.5; }
+		h1 { font-size: 180%; color: black; text-shadow: 3px 3px 3px lightgray; }
+		h2 { font-size: 150%; color: black; text-shadow: 2px 2px 2px lightgray; }
+		div.indent { margin-left: 2em; }
+		div.code { font-family: monospace; font-size: 100%; font-weight: bold; white-space: pre; line-height: 120%; }
+		span.code { font-family: monospace; font-size: 100%; font-weight: bold; white-space: pre; }
+	</style>
+</head>
+<body>
+<!-- タイトル -->
+<h1>SVGで遊ぶ <small>- 飛び回る手裏剣を作ってみよう -</small></h1>
+<svg width="600" height="120" viewBox="0 0 200 40" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<symbol id="syuriken_tate">
+		<polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/>
+	</symbol>
+	<symbol id="syuriken_yoko">
+		<use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/>
+	</symbol>
+	<symbol id="syuriken_rb">
+		<use xlink:href="#syuriken_tate" fill="red"/>
+		<use xlink:href="#syuriken_yoko" fill="blue"/>
+	</symbol>
+	<symbol id="syuriken_go">
+		<use xlink:href="#syuriken_tate" fill="green"/>
+		<use xlink:href="#syuriken_yoko" fill="orange"/>
+	</symbol>
+	<g>
+		<use xlink:href="#syuriken_rb">
+			<animateTransform attributeName="transform" type="rotate" from="0 10,10" to="360 10,10" dur="2s" repeatCount="indefinite"/>
+		</use>
+		<animateTransform id="a1" attributeName="transform" type="translate" from="  1  1" to="179  1" dur="4.0s" begin="0s;a4.end"/>
+		<animateTransform id="a2" attributeName="transform" type="translate" from="179  1" to="179 19" dur="0.5s" begin="a1.end"/>
+		<animateTransform id="a3" attributeName="transform" type="translate" from="179 19" to="  1 19" dur="4.0s" begin="a2.end"/>
+		<animateTransform id="a4" attributeName="transform" type="translate" from="  1 19" to="  1  1" dur="0.5s" begin="a3.end"/>
+	</g>
+	<g>
+		<use xlink:href="#syuriken_go">
+			<animateTransform attributeName="transform" type="rotate" from="0 10,10" to="360 10,10" dur="1s" repeatCount="indefinite"/>
+		</use>
+		<animateTransform id="b1" attributeName="transform" type="translate" from="  1  1" to="179  1" dur="2.0s" begin="0s;b4.end"/>
+		<animateTransform id="b2" attributeName="transform" type="translate" from="179  1" to="179 19" dur="0.2s" begin="b1.end"/>
+		<animateTransform id="b3" attributeName="transform" type="translate" from="179 19" to="  1 19" dur="2.0s" begin="b2.end"/>
+		<animateTransform id="b4" attributeName="transform" type="translate" from="  1 19" to="  1  1" dur="0.2s" begin="b3.end"/>
+	</g>
+</svg>
+<hr>
+
+<!-- はじめに -->
+<h2>はじめに</h2>
+<div class="indent">
+	SVGは画像形式の一つで、「Scalable」という名前の通り、拡大しても線が粗くならない画像を作成できます。<br/>
+	SVGでは自在に拡大縮小、移動や変形ができるほか、アニメーション機能で作成した画像を動かすこともできます。<br/>
+	<br/>
+	CoderDojo厚木のホームペジにあるロゴマークはSVGで作っていますし、このページのタイトルの手裏剣もSVGで記述しています。<br/>
+	ログマークはちょっと複雑なので、ここでは手裏剣の画像の作り方を説明しましょう。<br/>
+	<br/>
+	以下、このページの各SVGの記述は、拡張子を".svg"としたファイルに保存すれば、SVGに対応しているブラウザ（ChromeやEdge等）で表示することができます。<br/>
+</div>
+<br/>
+
+<!-- 描画領域の設定 -->
+<h2>手裏剣が飛び回る場所を設定します</h2>
+<div class="indent">
+	このページのタイトルの横がかなり空いていたので、「飛び回る場所」は横長の長方形にしました。<br/>
+	長方形のサイズは、200x40ですが、それを3倍にして600x120ピクセルで表示しています。<br/>
+	<br/>
+	SVGは拡大縮小が自由にできる「Scalable」なので、縦横の比以外は気にすることはありません。<br/>
+	領域を設定するためのSVGの記述とそのイメージを示します。（この記述をブラウザで表示しても、何も表示されません）<br/>
+	<br/>
+	<table border="1">
+	<tr><td valign="top">
+<div class="code">&lt;svg
+	<span style="background-color:lightblue">width="600" height="120"</span>
+	<span style="background-color:lightgreen">viewBox="0 0 200 40"</span>
+	version="1.1"
+	xml:space="preserve"
+	xmlns="http://www.w3.org/2000/svg"
+	xmlns:xlink="http://www.w3.org/1999/xlink"&gt;
+	<span style="background-color:yellow">...</span>
+&lt;/svg&gt;
+</div>
+	</td></tr>
+	<tr><td>
+	<svg width="660" height="180" viewBox="-10 -10 220 60" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+		<rect x="0" y="0" width="200" height="40" stroke="blue" fill="none"/>
+		<text x="-5"  y="-3" font-size="5">(0,0)</text>
+		<text x="185" y="-3" font-size="5">(200,0)</text>
+		<text x="-5"  y="46" font-size="5">(0,40)</text>
+		<text x="185" y="46" font-size="5">(200,40)</text>
+	</svg>
+	</td></tr>
+	</table>
+	<br/>
+	ここで、<span class="code">&lt;svg&gt;</span>から<span class="code">&lt;/svg&gt;</span>までが場所の設定で、
+	<span class="code" style="background-color:yellow">...</span>のところに、「飛び回る手裏剣」を記載していきます。<br/>
+	<br/>
+	場所の設定は、<span class="code" style="background-color:lightgreen">viewBox="0 0 200 40"</span>の部分です。<br/>
+	右側の図のように、<span class="code" style="background-color:lightgreen">0 0</span>の部分が左上の座標、
+	<span class="code" style="background-color:lightgreen">200 40</span>の部分が長方形の幅と高さになります。<br/>
+	<br/>
+	<span class="code" style="background-color:lightblue">width="600" height="120"</span>は、このSVGの座標上に描かれたものを画面上にどう表示するのかを設定します。<br/>
+	ここでは、幅も高さも3倍に拡大して表示するようにしています。<br/>
+	<br>
+	他の部分は、ここではおまじないと思ってください。<br/>
+</div>
+<br/>
+
+<!-- 手裏剣の縦部分の図形の描画 -->
+<h2>手裏剣の縦の部分の図形を作ります - <small>多角形の描画</small></h2>
+<div class="indent">
+	手裏剣は、異なる色の図形を2個組み合わせることで作っています。<br/>
+	<br/>
+	まず縦長の図形を1個作ります。<br/>
+	<br/>
+	<table border="1">
+	<tr><td valign="top">
+<div class="code"><span style="background-color:lightgray">&lt;svg</span>
+	<span style="background-color:lightgray">width="600" height="120"</span>
+	<span style="background-color:lightgray">viewBox="0 0 200 40"</span>
+	<span style="background-color:lightgray">version="1.1"</span>
+	<span style="background-color:lightgray">xml:space="preserve"</span>
+	<span style="background-color:lightgray">xmlns="http://www.w3.org/2000/svg"</span>
+	<span style="background-color:lightgray">xmlns:xlink="http://www.w3.org/1999/xlink"&gt;</span>
+	<span style="background-color:lightblue">&lt;polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/&gt;</span>
+<span style="background-color:lightgray">&lt;/svg&gt;</span>
+</div>
+	</td></tr>
+	<tr><td>
+	<svg width="300" height="200" viewBox="-10 -3 40 26" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+		<polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/>
+		<text x="10" y= "9" font-size="2">(10,10)</text>
+		<text x= "6" y="-1" font-size="2">(10,0)</text>
+		<text x="-1" y= "6" font-size="2">(5,5)</text>
+		<text x="-2" y="11" font-size="2">(5,10)</text>
+		<text x= "6" y="22" font-size="2">(10,20)</text>
+		<text x="15" y="16" font-size="2">(15,15)</text>
+		<text x="15" y="12" font-size="2">(15,10)</text>
+	</svg>
+	</td></tr>
+	</table>
+	<br/>
+	<span class="code" style="background-color:lightblue">&lt;polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/&gt;</span>が追加した部分です。<br/>
+	<span class="code" style="background-color:lightblue">polygon</span>は、
+	<span class="code" style="background-color:lightblue">points="..."</span>の
+	<span class="code" style="background-color:lightblue">...</span>に並んでいる点を結ぶ図形を描きます。<br/>
+	<br/>
+	ここでは、次の各点をつなぐ閉じた図形を描きます： (10,0) - (5,5) - (5,10) - (15,10) - (15,15) - (10,20)<br/>
+	右の図に描いている(10,10)は、この図形の中心の点になります。<br/>
+	<br/>
+	図形の色を指定していないと、図形は黒で塗りつぶされます。（ここでは色は指定しないでおきます）<br/>
+</div>
+<br/>
+
+<!-- 手裏剣の横部分の図形の描画 -->
+<h2>手裏剣の横の部分の図形を作ります - <small>名前付けと回転</small></h2>
+<div class="indent">
+	この縦長の図形を90度横に寝かせると、手裏剣の横長の図形になります。<br/>
+	<br/>
+	まずは縦長の図形を回転させるために、縦長の図形に名前をつけます。名前は、
+	<span class="code" style="background-color:lightblue">syuriken_tate</span>としておきましょう。<br/>
+	<br/>
+	<table border="1">
+	<tr><td valign="top">
+<div class="code"><span style="background-color:lightgray">&lt;svg</span>
+	<span style="background-color:lightgray">width="600" height="120"</span>
+	<span style="background-color:lightgray">viewBox="0 0 200 40"</span>
+	<span style="background-color:lightgray">version="1.1"</span>
+	<span style="background-color:lightgray">xml:space="preserve"</span>
+	<span style="background-color:lightgray">xmlns="http://www.w3.org/2000/svg"</span>
+	<span style="background-color:lightgray">xmlns:xlink="http://www.w3.org/1999/xlink"&gt;</span>
+	<span style="background-color:lightblue">&lt;symbol id="syuriken_tate"&gt;</span>
+		<span style="background-color:lightblue">&lt;polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/&gt;</span>
+	<span style="background-color:lightblue">&lt;/symbol&gt;</span>
+<span style="background-color:lightgray">&lt;/svg&gt;</span>
+</div>
+	</td></tr>
+	</table>
+	<br/>
+	<span class="code" style="background-color:lightblue">symbol</span>は
+	<span class="code" style="background-color:lightblue">id</span>で指定した名前をつけます。<br/>
+	<span class="code" style="background-color:lightblue">symbol</span>では描画はおこわなれません。<br/>
+	<br/>
+	では、この<span class="code" style="background-color:lightblue">syuriken_tate</span>を90度右に回転させてみます。<br/>
+	<br/>
+	<table border="1">
+	<tr><td valign="top">
+<div class="code"><span style="background-color:lightgray">&lt;svg</span>
+	<span style="background-color:lightgray">width="600" height="120"</span>
+	<span style="background-color:lightgray">viewBox="0 0 200 40"</span>
+	<span style="background-color:lightgray">version="1.1"</span>
+	<span style="background-color:lightgray">xml:space="preserve"</span>
+	<span style="background-color:lightgray">xmlns="http://www.w3.org/2000/svg"</span>
+	<span style="background-color:lightgray">xmlns:xlink="http://www.w3.org/1999/xlink"&gt;</span>
+	<span style="background-color:lightblue">&lt;symbol id="syuriken_tate"&gt;</span>
+		<span style="background-color:lightblue">&lt;polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/&gt;</span>
+	<span style="background-color:lightblue">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgreen">&lt;use xlink:href="#syuriken_tate" transform="rotate(90 10,10)"/&gt;</span>
+<span style="background-color:lightgray">&lt;/svg&gt;</span>
+</div>
+	</td></tr>
+	<tr><td>
+	<svg width="300" height="200" viewBox="-10 -3 40 26" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+		<symbol id="syuriken_tate">
+			<polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/>
+		</symbol>
+		<use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/>
+	</svg>
+	</td></tr>
+	</table>
+	<br/>
+	<span class="code" style="background-color:lightgreen">use xlink:href="#syuriken_tate"</span>で、その名前（の図形）を使用し、
+	<span class="code" style="background-color:lightgreen">transform="rotate(90 10,10)"</span>で、図形を(10,10)を中心に90度時計回りに回転させます。<br/><br/>
+	回転させた図形には、<span class="code" style="background-color:lightgreen">syuriken_yoko</span>と名前をつけておきます。<br/><br/>
+	<table border="1">
+	<tr><td valign="top">
+<div class="code"><span style="background-color:lightgray">&lt;svg</span>
+	<span style="background-color:lightgray">width="600" height="120"</span>
+	<span style="background-color:lightgray">viewBox="0 0 200 40"</span>
+	<span style="background-color:lightgray">version="1.1"</span>
+	<span style="background-color:lightgray">xml:space="preserve"</span>
+	<span style="background-color:lightgray">xmlns="http://www.w3.org/2000/svg"</span>
+	<span style="background-color:lightgray">xmlns:xlink="http://www.w3.org/1999/xlink"&gt;</span>
+	<span style="background-color:lightblue">&lt;symbol id="syuriken_tate"&gt;</span>
+		<span style="background-color:lightblue">&lt;polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/&gt;</span>
+	<span style="background-color:lightblue">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgreen">&lt;symbol id="syuriken_yoko"&gt;</span>
+		<span style="background-color:lightgreen">&lt;use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/&gt;</span>
+	<span style="background-color:lightgreen">&lt;/symbol&gt;</span>
+<span style="background-color:lightgray">&lt;/svg&gt;</span>
+</div>
+	</td></tr>
+	</table>
+</div>
+<br/>
+
+<!-- 手裏剣の描画 -->
+<h2>手裏剣を作ります - <small>図形の組み合わせと色づけ</small></h2>
+<div class="indent">
+	縦長の図形と横長の図形を組み合わせることで手裏剣の形が完成します。<br/>
+	<br/>
+	まずは単純に今まで作ってきた<span class="code" style="background-color:lightgray">syuriken_tate</span>と
+	<span class="code" style="background-color:lightgray">syuriken_yoko</span>を組み合わせて表示します。<br/>
+	<br/>
+	<table border="1">
+	<tr><td valign="top">
+<div class="code"><span style="background-color:lightgray">&lt;svg</span>
+	<span style="background-color:lightgray">width="600" height="120"</span>
+	<span style="background-color:lightgray">viewBox="0 0 200 40"</span>
+	<span style="background-color:lightgray">version="1.1"</span>
+	<span style="background-color:lightgray">xml:space="preserve"</span>
+	<span style="background-color:lightgray">xmlns="http://www.w3.org/2000/svg"</span>
+	<span style="background-color:lightgray">xmlns:xlink="http://www.w3.org/1999/xlink"&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_tate"&gt;</span>
+		<span style="background-color:lightgray">&lt;polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_yoko"&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightblue">&lt;use xlink:href="#syuriken_tate"/&gt;</span>
+	<span style="background-color:lightblue">&lt;use xlink:href="#syuriken_yoko"/&gt;</span>
+<span style="background-color:lightgray">&lt;/svg&gt;</span>
+</div>
+	</td></tr>
+	<tr><td>
+	<svg width="300" height="200" viewBox="-10 -3 40 26" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+		<symbol id="syuriken_tate">
+			<polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/>
+		</symbol>
+		<symbol id="syuriken_yoko">
+			<use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/>
+		</symbol>
+		<use xlink:href="#syuriken_tate"/>
+		<use xlink:href="#syuriken_yoko"/>
+	</svg>
+	</td></tr>
+	</table>
+	<br/>
+	黒一色だと味気ないので、縦の図形を赤色、横の図形を青色にします。<br/>
+	<br/>
+	<table border="1">
+	<tr><td valign="top">
+<div class="code"><span style="background-color:lightgray">&lt;svg</span>
+	<span style="background-color:lightgray">width="600" height="120"</span>
+	<span style="background-color:lightgray">viewBox="0 0 200 40"</span>
+	<span style="background-color:lightgray">version="1.1"</span>
+	<span style="background-color:lightgray">xml:space="preserve"</span>
+	<span style="background-color:lightgray">xmlns="http://www.w3.org/2000/svg"</span>
+	<span style="background-color:lightgray">xmlns:xlink="http://www.w3.org/1999/xlink"&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_tate"&gt;</span>
+		<span style="background-color:lightgray">&lt;polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_yoko"&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightblue">&lt;use xlink:href="#syuriken_tate" <span style="background-color:lightgreen">fill="red"</span>/&gt;</span>
+	<span style="background-color:lightblue">&lt;use xlink:href="#syuriken_yoko" <span style="background-color:lightgreen">fill="blue"</span>/&gt;</span>
+<span style="background-color:lightgray">&lt;/svg&gt;</span>
+</div>
+	</td></tr>
+	<tr><td>
+	<svg width="300" height="200" viewBox="-10 -3 40 26" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+		<symbol id="syuriken_tate">
+			<polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/>
+		</symbol>
+		<symbol id="syuriken_yoko">
+			<use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/>
+		</symbol>
+		<use xlink:href="#syuriken_tate" fill="red"/>
+		<use xlink:href="#syuriken_yoko" fill="blue"/>
+	</svg>
+	</td></tr>
+	</table>
+	<br/>
+	<span class="code" style="background-color:lightgreen">fill="red"</span>で赤色で、
+	<span class="code" style="background-color:lightgreen">fill="blue"</span>で青色で、図形を塗ります。<br/>
+	<br/>
+	この手裏剣には、<span class="code" style="background-color:lightgreen">syuriken_rb</span>と名前をつけます。<br/>
+	<br/>
+	<table border="1">
+	<tr><td valign="top">
+<div class="code"><span style="background-color:lightgray">&lt;svg</span>
+	<span style="background-color:lightgray">width="600" height="120"</span>
+	<span style="background-color:lightgray">viewBox="0 0 200 40"</span>
+	<span style="background-color:lightgray">version="1.1"</span>
+	<span style="background-color:lightgray">xml:space="preserve"</span>
+	<span style="background-color:lightgray">xmlns="http://www.w3.org/2000/svg"</span>
+	<span style="background-color:lightgray">xmlns:xlink="http://www.w3.org/1999/xlink"&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_tate"&gt;</span>
+		<span style="background-color:lightgray">&lt;polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_yoko"&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightblue">&lt;symbol id="syuriken_rb"&gt;</span>
+		<span style="background-color:lightblue">&lt;use xlink:href="#syuriken_tate" fill="red"/&gt;</span>
+		<span style="background-color:lightblue">&lt;use xlink:href="#syuriken_yoko" fill="blue"/&gt;</span>
+	<span style="background-color:lightblue">&lt;/symbol&gt;</span>
+<span style="background-color:lightgray">&lt;/svg&gt;</span>
+</div>
+</td></tr>
+</table>
+</div>
+<br/>
+
+<!-- 手裏剣の回転（自転） -->
+<h2>手裏剣を回します - <small>アニメーション（回転）</small></h2>
+<div class="indent">
+	ここから、手裏剣に動き（アニメーション）をつけます。<br/>
+	<br/>
+	まずは、手裏剣を回転させます。<br/>
+	</br>
+	<table border="1">
+	<tr><td valign="top">
+<div class="code"><span style="background-color:lightgray">&lt;svg</span>
+	<span style="background-color:lightgray">width="600" height="120"</span>
+	<span style="background-color:lightgray">viewBox="0 0 200 40"</span>
+	<span style="background-color:lightgray">version="1.1"</span>
+	<span style="background-color:lightgray">xml:space="preserve"</span>
+	<span style="background-color:lightgray">xmlns="http://www.w3.org/2000/svg"</span>
+	<span style="background-color:lightgray">xmlns:xlink="http://www.w3.org/1999/xlink"&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_tate"&gt;</span>
+		<span style="background-color:lightgray">&lt;polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_yoko"&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_rb"&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_tate" fill="red"/&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_yoko" fill="blue"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightblue">&lt;g&gt;</span>
+		<span style="background-color:lightblue">&lt;use xlink:href="#syuriken_rb"&gt;</span>
+			<span style="background-color:lightblue">&lt;animateTransform attributeName="transform" type="rotate"</span>
+				<span style="background-color:lightblue">from="0 10,10" to="360 10,10" dur="2s" repeatCount="indefinite"/&gt;</span>
+		<span style="background-color:lightblue">&lt;/use&gt;</span>
+	<span style="background-color:lightblue">&lt;/g&gt;</span>
+<span style="background-color:lightgray">&lt;/svg&gt;</span>
+</div>
+	</td></tr>
+	<tr><td>
+	<svg width="300" height="200" viewBox="-10 -3 40 26" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+		<symbol id="syuriken_tate">
+			<polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/>
+		</symbol>
+		<symbol id="syuriken_yoko">
+			<use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/>
+		</symbol>
+		<symbol id="syuriken_rb">
+			<use xlink:href="#syuriken_tate" fill="red"/>
+			<use xlink:href="#syuriken_yoko" fill="blue"/>
+		</symbol>
+		<g>
+			<use xlink:href="#syuriken_rb">
+				<animateTransform attributeName="transform" type="rotate" from="0 10,10" to="360 10,10" dur="2s" repeatCount="indefinite">
+			</use>
+		</g>
+	</svg>
+	</td></tr>
+	</table>
+	<br/>
+	回転させるには、<span class="code" style="background-color:lightblue">attributeName="transform" type="rotate"</span>を指定して、
+	<span class="code" style="background-color:lightblue">animateTransform</span>を使います。<br/>
+	<br/>
+	回転は、<span class="code" style="background-color:lightblue">dur</span>で指定した時間で、
+	<span class="code" style="background-color:lightblue">from</span>から<span class="code" style="background-color:lightblue">to</span>までを、
+	<span class="code" style="background-color:lightblue">repeatCount</span>回数繰り返します。<br/>
+	<span class="code" style="background-color:lightblue">from</span>や<span class="code" style="background-color:lightblue">to</span>で指定する値は、
+	（回転の始まりの角度　回転の中心点）となります。<br/>
+	ここでは、中心点を(10,10)として、0度から360度まで、2秒かけて回転させています。<br/>
+	回数で指定している<span class="code" style="background-color:lightblue">indefinite</span>は、無限に繰り返すことを意味しています。<br/>
+	<br/>
+	<span class="code" style="background-color:lightblue">&lt;g&gt;</span>と
+	<span class="code" style="background-color:lightblue">&lt;/g&gt;</span>は、
+	このアニメーションが効果を与える範囲（グループ）を示しています。<br/>
+	<br/>
+	CodeDojo厚木のロゴで文字が回っているのも、この回転のアニメーションを使用しています。<br/>
+</div>
+<br/>
+
+<!-- 手裏剣の移動 -->
+<h2>手裏剣を動かします - <small>アニメーション（移動）</small></h2>
+<div class="indent">
+	では、いよいよこの「回る手裏剣」を飛び回らせます。<br/>
+	<br/>
+	ますは、「回る手裏剣」を左から右に移動させてみます。<br/>
+	<br/>
+	<table border="1">
+	<tr><td valign="top">
+<div class="code"><span style="background-color:lightgray">&lt;svg</span>
+	<span style="background-color:lightgray">width="600" height="120"</span>
+	<span style="background-color:lightgray">viewBox="0 0 200 40"</span>
+	<span style="background-color:lightgray">version="1.1"</span>
+	<span style="background-color:lightgray">xml:space="preserve"</span>
+	<span style="background-color:lightgray">xmlns="http://www.w3.org/2000/svg"</span>
+	<span style="background-color:lightgray">xmlns:xlink="http://www.w3.org/1999/xlink"&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_tate"&gt;</span>
+		<span style="background-color:lightgray">&lt;polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_yoko"&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_rb"&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_tate" fill="red"/&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_yoko" fill="blue"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;g&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_rb"&gt;</span>
+			<span style="background-color:lightgray">&lt;animateTransform attributeName="transform" type="rotate"</span>
+				<span style="background-color:lightgray">from="0 10,10" to="360 10,10" dur="2s" repeatCount="indefinite"/&gt;</span>
+		<span style="background-color:lightgray">&lt;/use&gt;</span>
+		<span style="background-color:lightblue">&lt;animateTransform attributeName="transform" type="translate"</span>
+			<span style="background-color:lightblue">from="1,1" to="179,1" dur="4.0s" repeatCount="indefinite"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/g&gt;</span>
+<span style="background-color:lightgray">&lt;/svg&gt;</span>
+</div>
+	</td></tr>
+	<tr><td>
+	<svg width="600" height="120" viewBox="0 0 200 40" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+		<symbol id="syuriken_tate">
+			<polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/>
+		</symbol>
+		<symbol id="syuriken_yoko">
+			<use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/>
+		</symbol>
+		<symbol id="syuriken_rb">
+			<use xlink:href="#syuriken_tate" fill="red"/>
+			<use xlink:href="#syuriken_yoko" fill="blue"/>
+		</symbol>
+		<g>
+			<use xlink:href="#syuriken_rb">
+				<animateTransform attributeName="transform" type="rotate" from="0 10,10" to="360 10,10" dur="2s" repeatCount="indefinite">
+			</use>
+			<animateTransform attributeName="transform" type="translate" from="1,1" to="179,1" dur="4.0s" repeatCount="indefinite"/>
+		</g>
+	</svg>
+	</td></tr>
+	</table>
+	<br/>
+	今度は、手裏剣が四角を描くように移動させてみます。<br/>
+	<br/>
+	移動は、「左上から右上、右上から右下、右下から左下、左下から左上」を繰り返すようにします。<br/>
+	<br/>
+	<table border="1">
+	<tr><td valign="top">
+<div class="code"><span style="background-color:lightgray">&lt;svg</span>
+	<span style="background-color:lightgray">width="600" height="120"</span>
+	<span style="background-color:lightgray">viewBox="0 0 200 40"</span>
+	<span style="background-color:lightgray">version="1.1"</span>
+	<span style="background-color:lightgray">xml:space="preserve"</span>
+	<span style="background-color:lightgray">xmlns="http://www.w3.org/2000/svg"</span>
+	<span style="background-color:lightgray">xmlns:xlink="http://www.w3.org/1999/xlink"&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_tate"&gt;</span>
+		<span style="background-color:lightgray">&lt;polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_yoko"&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_rb"&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_tate" fill="red"/&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_yoko" fill="blue"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;g&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_rb"&gt;</span>
+			<span style="background-color:lightgray">&lt;animateTransform attributeName="transform" type="rotate"</span>
+				<span style="background-color:lightgray">from="0 10,10" to="360 10,10" dur="2s" repeatCount="indefinite"/&gt;</span>
+		<span style="background-color:lightgray">&lt;/use&gt;</span>
+		<span style="background-color:lightblue">&lt;animateTransform id="a1" attributeName="transform" type="translate"</span>
+			<span style="background-color:lightblue">from="1,1" to="179,1" dur="4.0s" begin="0s;a4.end"/&gt;</span>
+		<span style="background-color:lightblue">&lt;animateTransform id="a2" attributeName="transform" type="translate"</span>
+			<span style="background-color:lightblue">from="179,1" to="179,19" dur="0.5s" begin="a1.end"/&gt;</span>
+		<span style="background-color:lightblue">&lt;animateTransform id="a3" attributeName="transform" type="translate"</span>
+			<span style="background-color:lightblue">from="179,19" to="1,19" dur="4.0s" begin="a2.end"/&gt;</span>
+		<span style="background-color:lightblue">&lt;animateTransform id="a4" attributeName="transform" type="translate"</span>
+			<span style="background-color:lightblue">from="1,19" to="1,1" dur="0.5s" begin="a3.end"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/g&gt;</span>
+<span style="background-color:lightgray">&lt;/svg&gt;</span>
+</div>
+	</td></tr>
+	<tr><td>
+	<svg width="600" height="120" viewBox="0 0 200 40" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+		<symbol id="syuriken_tate">
+			<polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/>
+		</symbol>
+		<symbol id="syuriken_yoko">
+			<use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/>
+		</symbol>
+		<symbol id="syuriken_rb">
+			<use xlink:href="#syuriken_tate" fill="red"/>
+			<use xlink:href="#syuriken_yoko" fill="blue"/>
+		</symbol>
+		<g>
+			<use xlink:href="#syuriken_rb">
+				<animateTransform attributeName="transform" type="rotate" from="0 10,10" to="360 10,10" dur="2s" repeatCount="indefinite">
+			</use>
+			<animateTransform id="a1" attributeName="transform" type="translate" from="  1  1" to="179  1" dur="4.0s" begin="0s;a4.end"/>
+			<animateTransform id="a2" attributeName="transform" type="translate" from="179  1" to="179 19" dur="0.5s" begin="a1.end"/>
+			<animateTransform id="a3" attributeName="transform" type="translate" from="179 19" to="  1 19" dur="4.0s" begin="a2.end"/>
+			<animateTransform id="a4" attributeName="transform" type="translate" from="  1 19" to="  1  1" dur="0.5s" begin="a3.end"/>
+		</g>
+	</svg>
+	</td></tr>
+	</table>
+	<br/>
+	<span class="code" style="background-color:lightblue">symbol</span>のところで出てきた
+	<span class="code" style="background-color:lightblue">id</span>で名前をつけます。<br/>
+	<br/>
+	今度は、<span class="code" style="background-color:lightblue">repeatCount</span>は使用せずに、
+	<span class="code" style="background-color:lightblue">begin</span>でアニメーションの開始となるきっかけ（イベント）を指定します。<br/>
+	例えば、<span class="code" style="background-color:lightblue">0s;a4.end</span>では、
+	表示された時（<span class="code" style="background-color:lightblue">0s</span>）と、
+	<span class="code" style="background-color:lightblue">id="a4"</span>のアニメーションが終了した時（<span class="code" style="background-color:lightblue">a4.end</span>）
+	がアニメーションの開始となります。<br/>
+</div>
+<br/>
+
+<!-- おさらいで手裏剣の追加 -->
+<h2>手裏剣をもう1個追加します - <small>おさらい</small></h2>
+<div class="indent">
+	では、色や回転の速さ、動き回る速さを変えた手裏剣をもう1個追加して説明を終わりにします。<br/>
+	<br/>
+	実際のSVGのアニメーションは、タイトルの横に表示しています。<br/>
+	<br/>
+	<table border="1">
+	<tr>
+	<td valign="top">
+<div class="code"><span style="background-color:lightgray">&lt;svg</span>
+	<span style="background-color:lightgray">width="600" height="120"</span>
+	<span style="background-color:lightgray">viewBox="0 0 200 40"</span>
+	<span style="background-color:lightgray">version="1.1"</span>
+	<span style="background-color:lightgray">xml:space="preserve"</span>
+	<span style="background-color:lightgray">xmlns="http://www.w3.org/2000/svg"</span>
+	<span style="background-color:lightgray">xmlns:xlink="http://www.w3.org/1999/xlink"&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_tate"&gt;</span>
+		<span style="background-color:lightgray">&lt;polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_yoko"&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;symbol id="syuriken_rb"&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_tate" fill="red"/&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_yoko" fill="blue"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/symbol&gt;</span>
+	<span style="background-color:lightblue">&lt;symbol id="syuriken_go"&gt;</span>
+		<span style="background-color:lightblue">&lt;use xlink:href="#syuriken_tate" fill="green"/&gt;</span>
+		<span style="background-color:lightblue">&lt;use xlink:href="#syuriken_yoko" fill="orange"/&gt;</span>
+	<span style="background-color:lightblue">&lt;/symbol&gt;</span>
+	<span style="background-color:lightgray">&lt;g&gt;</span>
+		<span style="background-color:lightgray">&lt;use xlink:href="#syuriken_rb"&gt;</span>
+			<span style="background-color:lightgray">&lt;animateTransform attributeName="transform" type="rotate"</span>
+				<span style="background-color:lightgray">from="0 10,10" to="360 10,10" dur="2s" repeatCount="indefinite"/&gt;</span>
+		<span style="background-color:lightgray">&lt;/use&gt;</span>
+		<span style="background-color:lightgray">&lt;animateTransform id="a1" attributeName="transform" type="translate"</span>
+			<span style="background-color:lightgray">from="1,1" to="179,1" dur="4.0s" begin="0s;a4.end"/&gt;</span>
+		<span style="background-color:lightgray">&lt;animateTransform id="a2" attributeName="transform" type="translate"</span>
+			<span style="background-color:lightgray">from="179,1" to="179,19" dur="0.5s" begin="a1.end"/&gt;</span>
+		<span style="background-color:lightgray">&lt;animateTransform id="a3" attributeName="transform" type="translate"</span>
+			<span style="background-color:lightgray">from="179,19" to="1,19" dur="4.0s" begin="a2.end"/&gt;</span>
+		<span style="background-color:lightgray">&lt;animateTransform id="a4" attributeName="transform" type="translate"</span>
+			<span style="background-color:lightgray">from="1,19" to="1,1" dur="0.5s" begin="a3.end"/&gt;</span>
+	<span style="background-color:lightgray">&lt;/g&gt;</span>
+	<span style="background-color:lightblue">&lt;g&gt;</span>
+		<span style="background-color:lightblue">&lt;use xlink:href="#syuriken_go"&gt;</span>
+			<span style="background-color:lightblue">&lt;animateTransform attributeName="transform" type="rotate"</span>
+				<span style="background-color:lightblue">from="0 10,10" to="360 10,10" dur="1s" repeatCount="indefinite"/&gt;</span>
+		<span style="background-color:lightblue">&lt;/use&gt;</span>
+		<span style="background-color:lightblue">&lt;animateTransform id="b1" attributeName="transform" type="translate"</span>
+			<span style="background-color:lightblue">from="1,1" to="179,1" dur="2.0s" begin="0s;b4.end"/&gt;</span>
+		<span style="background-color:lightblue">&lt;animateTransform id="b2" attributeName="transform" type="translate"</span>
+			<span style="background-color:lightblue">from="179,1" to="179,19" dur="0.2s" begin="b1.end"/&gt;</span>
+		<span style="background-color:lightblue">&lt;animateTransform id="b3" attributeName="transform" type="translate"</span>
+			<span style="background-color:lightblue">from="179,19" to="1,19" dur="2.0s" begin="b2.end"/&gt;</span>
+		<span style="background-color:lightblue">&lt;animateTransform id="b4" attributeName="transform" type="translate"</span>
+			<span style="background-color:lightblue">from="1,19" to="1,1" dur="0.2s" begin="b3.end"/&gt;</span>
+	<span style="background-color:lightblue">&lt;/g&gt;</span>
+<span style="background-color:lightgray">&lt;/svg&gt;</span>
+</div>
+	</td></tr>
+	<tr><td>
+	<svg width="600" height="120" viewBox="0 0 200 40" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+		<symbol id="syuriken_tate">
+			<polygon points="10,0 5,5 5,10 15,10 15,15 10,20"/>
+		</symbol>
+		<symbol id="syuriken_yoko">
+			<use xlink:href="#syuriken_tate" transform="rotate(90,10,10)"/>
+		</symbol>
+		<symbol id="syuriken_rb">
+			<use xlink:href="#syuriken_tate" fill="red"/>
+			<use xlink:href="#syuriken_yoko" fill="blue"/>
+		</symbol>
+		<symbol id="syuriken_go">
+			<use xlink:href="#syuriken_tate" fill="green"/>
+			<use xlink:href="#syuriken_yoko" fill="orange"/>
+		</symbol>
+		<g>
+			<use xlink:href="#syuriken_rb">
+				<animateTransform attributeName="transform" type="rotate" from="0 10,10" to="360 10,10" dur="2s" repeatCount="indefinite"/>
+			</use>
+			<animateTransform id="a1" attributeName="transform" type="translate" from="  1  1" to="179  1" dur="4.0s" begin="0s;a4.end"/>
+			<animateTransform id="a2" attributeName="transform" type="translate" from="179  1" to="179 19" dur="0.5s" begin="a1.end"/>
+			<animateTransform id="a3" attributeName="transform" type="translate" from="179 19" to="  1 19" dur="4.0s" begin="a2.end"/>
+			<animateTransform id="a4" attributeName="transform" type="translate" from="  1 19" to="  1  1" dur="0.5s" begin="a3.end"/>
+		</g>
+		<g>
+			<use xlink:href="#syuriken_go">
+				<animateTransform attributeName="transform" type="rotate" from="0 10,10" to="360 10,10" dur="1s" repeatCount="indefinite"/>
+			</use>
+			<animateTransform id="b1" attributeName="transform" type="translate" from="  1  1" to="179  1" dur="2.0s" begin="0s;b4.end"/>
+			<animateTransform id="b2" attributeName="transform" type="translate" from="179  1" to="179 19" dur="0.2s" begin="b1.end"/>
+			<animateTransform id="b3" attributeName="transform" type="translate" from="179 19" to="  1 19" dur="2.0s" begin="b2.end"/>
+			<animateTransform id="b4" attributeName="transform" type="translate" from="  1 19" to="  1  1" dur="0.2s" begin="b3.end"/>
+		</g>
+	</svg>
+	</td></tr>
+	</table>
+	<br/>
+	今まで説明してきた内容で手裏剣を追加しています。皆さんも自由に修正してみてください。<br/>
+</div>
+</body>
+</html>
