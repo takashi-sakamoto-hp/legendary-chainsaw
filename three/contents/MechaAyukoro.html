@@ -6,12 +6,14 @@
 		<title>Mechanical AYU-KORO</title>
 		<style>
 			label { display: inline-block;  width: 3em; }
+			body		{ font-size: 120%; }
+			#canvas		{ position: absolute; top: 0px; left: 0px; z-index: 0; }
+			#control	{ position: absolute; top: 10px; left: 10px; z-index: 1; }
 		</style>
 	</head>
 	<body>
-		<label for="beamLength">ビーム</label><input id="beamLength" type="range" min="0" max="2" step="0.01" style="width: 400px;" value="0">
-		<div id="canvas" style="width: 98vw; height: 94vh;">
-		</div>
+		<div id="control"><label for="beamLength">ビーム</label><input id="beamLength" type="range" min="0" max="2" step="0.01" style="width: 400px;" value="0"></div>
+		<div id="canvas" style="width: 100%; height: 100%;"></div>
 		<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
 		<script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 		<script>
