@@ -5,10 +5,23 @@
 		<meta name="Author" content="Sakamoto Takashi">
 		<title></title>
 		<style>
-			#canvas			{ position: absolute; top: 0px; left:   0px; z-index: 0; }
+			input		{ width: 200px; }
+			#control	{ position: absolute; top: 10px; left:   10px; z-index: 1; }
+			#canvas		{ position: absolute; top: 0px; left:   0px; z-index: 0; }
 		</style>
 	</head>
 	<body>
+		<div id="control">
+			<table>
+				<tr><th rowspan="2">カメラ移動</th><th>左</th><td><input id="iCameraMoveLR" class="long" type="range" min="-40" max="40" step="1" value="0"></td><th>右</th></tr>
+				<tr>							<th>前</th><td><input id="iCameraMoveFB" class="long" type="range" min="-40" max="40" step="1" value="0"></td><th>後</th></tr>
+			</table>
+			<br>
+			<table>
+				<tr><th rowspan="2">カメラ回転</th><th>左</th><td><input id="iCameraRotLR" class="long" type="range" min="-40" max="40" step="1" value="0"></td><th>右</th></tr>
+				<tr>							<th>上</th><td><input id="iCameraRotUD" class="long" type="range" min="-40" max="40" step="1" value="0"></td><th>下</th></tr>
+			</table>
+		</div>
 		<div id="canvas" style="width: 100%; height: 100%;"></div>
 		<script type="importmap">
 			{
@@ -887,8 +900,22 @@
 				getDebug() { return this.#createRightArm(); }
 			}
 			
-			const VR = false;
-			
+		
+			function setCamera() {
+				const iCameraMoveLR	= document.getElementById('iCameraMoveLR');
+				const iCameraMoveFB	= document.getElementById('iCameraMoveFB');
+				const iCameraRotLR	= document.getElementById('iCameraRotLR');
+				const iCameraRotUD	= document.getElementById('iCameraRotUD');
+				if (!renderer.xr.isPresenting) {
+					camera.position.set(Number(iCameraMoveLR.value)/40, 1.2, Number(iCameraMoveFB.value)/40);
+					camera.rotation.order = 'YXZ';
+					camera.rotation.y = -Number(iCameraRotLR.value)/40*Math.PI;
+					camera.rotation.x = -Number(iCameraRotUD.value)/40*Math.PI/2;
+				}
+				camera.aspect = getWidth() / getHeight();
+				camera.updateProjectionMatrix();
+			}
+
 			const scene = new THREE.Scene();
 			const directionLight = new THREE.DirectionalLight(0xffffff, 4);
 			directionLight.position.set(1, 0.5, 1);
@@ -918,10 +945,11 @@
 			renderer.setClearColor(0x888888);
 			renderer.render(scene, camera);
 			canvas.appendChild(renderer.domElement);
-			let controls = null;
+
 			renderer.xr.enabled = true;
 			canvas.appendChild(VRButton.createButton(renderer));
 			function animate() {
+				setCamera();
 				renderer.setSize(getWidth(), getHeight());
 				renderer.render(scene, camera);
 			}
