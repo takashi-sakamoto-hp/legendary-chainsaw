@@ -638,6 +638,10 @@
 					this.#object = new THREE.Group();
 					this.#object.add(this.createObject());
 					this.#object.rotation.set(0, 0.3, 0);
+
+					this.#object.traverse((obj) => {
+						if (obj instanceof THREE.Mesh) { obj.castShadow = true; }
+					});
 				}
 				getObject() { return this.#object; }
 			}
@@ -650,11 +654,22 @@
 			const directionLight = new THREE.DirectionalLight(0xffffff, 3);
 			directionLight.position.set(1, 1, 1);
 			directionLight.target.position.set(0, 0, 0);
+			directionLight.castShadow = true;
+			directionLight.shadow.mapSize.width = 1024;
+			directionLight.shadow.mapSize.height = 1024;
+			directionLight.shadow.camera.left = -90;
+			directionLight.shadow.camera.right = 90;
+			directionLight.shadow.camera.top = 90;
+			directionLight.shadow.camera.bottom = -90;
+			directionLight.shadow.camera.near = 0.1;
+			directionLight.shadow.camera.far = 100;
+			directionLight.shadow.bias = -0.0001;
 			scene.add(directionLight);
 			scene.add(new THREE.AmbientLight(0x999999, 1));
 
-			const field = new THREE.Mesh(new THREE.BoxGeometry(40, 1, 30), new THREE.MeshStandardMaterial({color: 0xbbaaaa}));
+			const field = new THREE.Mesh(new THREE.BoxGeometry(80, 1, 80), new THREE.MeshStandardMaterial({color: 0xbbaaaa}));
 			field.position.set(0, -13.7, 0);
+			field.receiveShadow  = true;
 			scene.add(field);
 
 			const iron28 = new Iron28();
@@ -663,6 +678,7 @@
 			const renderer = new THREE.WebGLRenderer();
 			renderer.setSize(getWidth(), getHeight());
 			renderer.setClearColor(0xaaaaaa);
+			renderer.shadowMap.enabled = true;
 			canvas.appendChild(renderer.domElement);
 
 			const camera = new THREE.PerspectiveCamera(50, getWidth()/getHeight(), 0.1, 1000);
