@@ -44,7 +44,7 @@
 		const orbitControls = new OrbitControls(camera,renderer.domElement);
 		function update() {
 			orbitControls.update();
-			requestAnimationFrame(render);
+			requestAnimationFrame(renderer);
 			renderer.render(scene, camera);
 		}
 
