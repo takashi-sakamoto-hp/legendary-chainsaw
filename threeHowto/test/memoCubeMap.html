@@ -43,7 +43,7 @@
 
 		const orbitControls = new OrbitControls(camera,renderer.domElement);
 		function update() {
-			orbitControls.update(clock.getDelta());
+			orbitControls.update();
 			requestAnimationFrame(render);
 			renderer.render(scene, camera);
 		}
