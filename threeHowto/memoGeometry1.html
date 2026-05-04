@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ja" class="notranslate" translate="no">
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta name="Author" content="Sakamoto Takashi">
+		<title>図形(geometry)(1/3)</title>
+		<style>
+			body { background: whitesmoke; padding: 5px 10px 5px 10px; line-height: 1.5; }
+			h1 { font-size: 160%; color: black; margin-bottom: 0px; text-shadow: 3px 3px 3px lightgray; line-height: 1.5; margin-bottom: 0; }
+			h2 { font-size: 140%; color: black; text-shadow: 2px 2px 2px lightgray; }
+			h3 { font-size: 100%; color: black; text-shadow: 1px 1px 2px lightgray; }
+			div.indent { margin-left: 2em; }
+			div { padding-bottom: 0.5em; }
+			span.code { font-family: monospace; background-color: #fff0d0; border:1px solid #c0c0a0; border-radius: 0.2em; padding: 0.2em 0.2em; margin: 0 0.2em;}
+			div.code {white-space: pre-wrap; tab-size: 4; font-family: monospace; background-color: #fff0d0; border:1px solid #c0c0a0; border-radius: 0.2em; padding: 0.2em 0.2em; margin: 0.5em 0.2em;}
+			span.strong {font-weight: bold; color:red; }
+			.canvas { width: 300px; height: 200px; padding-bottom: 1em; }
+			td { font-size: 90%; vertical-align: top; }
+		</style>
+		<script type="importmap">
+		{
+		  "imports": {
+			"three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+			"three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+		  }
+		}
+		</script>
+	</head>
+	<body>
+		<h1>図形(geometry)(1/3)<hr></h1>
+		<h2>概要</h2>
+		<div class="indent">
+			ここではThree.jsに組み込まれている代表的な図形(geometry)を紹介する。パラメータの詳細についてはオフィシャルサイトを参照のこと。
+			<br><br>
+			<table>
+				<tr><th>直方体(box)</th></tr>
+				<tr>
+					<td id="c01" class="canvas"></td>
+					<td>
+					BoxGeometry(width=1, height=1, depth=1, widthSegments=1, heightSegments=1, depthSegments=1)
+					<br>
+					<br>幅、高さ、奥行きを設定できるが、scaleで変更しても同様。
+					<br>segmentsは変形時に使用する。
+					</td>
+				</tr>
+				<tr><th>球(sphere)</th></tr>
+				<tr>
+					<td id="c02" class="canvas"></td>
+					<td>
+					SphereGeometry(radius=1, widthSegments=32, heightSegments=16, phiStart=0, phiLength=Math.PI*2, thetaStart=0, thetaLength=Math.PI)
+					<br>
+					<br>phiは(-radius,0,0)からzが正方向に増加。
+					<br>thetaはyの最大値から負方向に増加。
+					</td>
+				</tr>
+				<tr><th>円錐(cone)</th></tr>
+				<tr>
+					<td id="c03" class="canvas"></td>
+					<td>
+					ConeGeometry(radius=1, height=1, radialSegments=32, heightSegments=1, openEnded=false, thetaStart=0, thetaLength=Math.PI*2)
+					<br>
+					<br>thetaは(0,-height/2,radius)からxが正方向に増加。
+					<br>CylinderGeometryのradiusTop=0と同様。
+					</td>
+				</tr>
+				<tr><th>円柱(cylinder)</th></tr>
+				<tr>
+					<td id="c04" class="canvas"></td>
+					<td>
+					CylinderGeometry(radiusTop=1, radiusBottom=1, height=1, radialSegments=32, heightSegments=1, openEnded=false, thetaStart=0, thetaLength=Math.PI*2)
+					<br>
+					<br>thetaは(0,-height/2,radius)からxが正方向に増加。
+					</td>
+				</tr>
+				<tr><th>トーラス(torus)</th></tr>
+				<tr>
+					<td id="c05" class="canvas"></td>
+					<td>
+					TorusGeometry(radius=1, tube=0.4, radialSegments=12, tubularSegments=48, arc=Math.PI*2, thetaStart=0, thetaLength=Math.PI*2)
+					<br>
+					<br>arcはthetaLengthと同じ(バージョンによって使用する名前が異なるだけ)。
+					<br>thetaStartは(xの最大値,0,0)からyの正方向に増加。
+					</td>
+				</tr>
+				<tr><th>チューブ(tube)</th></tr>
+				<tr>
+					<td id="c06" class="canvas"></td>
+					<td>
+					TubeGeometry(path, tubularSegments=64, radius=1, radialSegments=8, closed=false)
+					<br>
+					<br>pathはTHREE.Curveのサブクラス。getPoint(t, optionalTarget = new THREE.Vector3())をオーバライドする。
+					<br>tは0～1の範囲で増加。
+					</td>
+				</tr>
+				<tr><th>トーラスノット(torusknot)</th></tr>
+				<tr>
+					<td id="c07" class="canvas"></td>
+					<td>
+					TorusKnotGeometry(radius=1, tube=0.4, tubularSegments=64, radialSegments=8, p=2, q=3)
+					<br>
+					<br>p：大きい輪（トーラスの外周）を何回まわるかを表す。
+					<br>q：小さい輪（断面の円）を何回まわるかを表す。
+					</td>
+				</tr>
+				<tr><th>カプセル(capsule)</th></tr>
+				<tr>
+					<td id="c08" class="canvas"></td>
+					<td>
+					CapsuleGeometry(radius=1, height=1, capSegments=4, radialSegments=8, heightSegments=1)
+					</td>
+				</tr>
+			</table>
+			<br>
+		</div>
+
+		<script type="module">
+		import * as THREE from 'three';
+		import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+		
+		class GeoMat {
+			#scene;
+			#camera;
+			#renderer;
+			#control;
+			constructor(object, width = 300, height = 200) {
+				this.#scene = new THREE.Scene();
+				this.#scene.add(object);
+				const directionLight = new THREE.DirectionalLight(0xffffff, 3);
+				directionLight.position.set(1, 1, 1);
+				directionLight.target.position.set(0, 0, 0);
+				this.#scene.add(directionLight);
+				this.#scene.add(new THREE.AmbientLight(0x999999, 2));
+				this.#camera = new THREE.PerspectiveCamera(50, width/height, 0.1, 1000);
+				this.#camera.position.set(-1, 1, 3);
+				this.#camera.lookAt(0, 0, 0);
+				this.#renderer = new THREE.WebGLRenderer();
+				this.#renderer.setSize(width, height);
+				this.#renderer.setClearColor(0xdddddd);
+				this.#renderer.render(this.#scene, this.#camera);
+				this.#control = new OrbitControls(this.#camera, this.#renderer.domElement);
+			}
+			getRenderer() { return this.#renderer; }
+			animate() {
+				this.#control.update();
+				this.#renderer.render(this.#scene, this.#camera);
+			}
+		}
+		
+		class CustomSinCurve extends THREE.Curve {
+			getPoint(t, optionalTarget = new THREE.Vector3()) { return optionalTarget.set(t*3-1.5, Math.sin(2*Math.PI*t), 0); }
+		}
+		const tubeGeometry = new THREE.TubeGeometry(new CustomSinCurve(), 32, 0.2, 16, false);
+		
+		const objects = [
+			new GeoMat(new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.3, 1.3),				new THREE.MeshStandardMaterial({color: 0xff0000}))),
+			new GeoMat(new THREE.Mesh(new THREE.SphereGeometry(1),						new THREE.MeshStandardMaterial({color: 0x00ff00}))),
+			new GeoMat(new THREE.Mesh(new THREE.ConeGeometry(0.8, 2),					new THREE.MeshStandardMaterial({color: 0x0000ff}))),
+			new GeoMat(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1, 1.5),			new THREE.MeshStandardMaterial({color: 0xffff00}))),
+			
+			new GeoMat(new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.3),				new THREE.MeshStandardMaterial({color: 0xff00ff}))),
+			new GeoMat(new THREE.Mesh(tubeGeometry,										new THREE.MeshStandardMaterial({color: 0x00ffff}))),
+			new GeoMat(new THREE.Mesh(new THREE.TorusKnotGeometry(0.6, 0.2, 100, 16),	new THREE.MeshStandardMaterial({color: 0xff8000}))),
+			new GeoMat(new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 0.8, 16, 32, 1),	new THREE.MeshStandardMaterial({color: 0xff0080}))),
+		];
+		for (let i = 0; i < objects.length; ++i) {
+			if (objects[i] != null) { document.getElementById('c' + String(i+1).padStart(2, '0')).appendChild(objects[i].getRenderer().domElement); }
+		}
+		function animate() {
+			objects.forEach((v) => {
+				if (v != null) { v.animate(); }
+			});
+		}
+		objects[0].getRenderer().setAnimationLoop(animate);
+		</script>
+	</body>
+</html>

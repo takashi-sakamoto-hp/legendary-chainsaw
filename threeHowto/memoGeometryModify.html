@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ja" class="notranslate" translate="no">
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta name="Author" content="Sakamoto Takashi">
+		<title>図形(geometry)のカスタマイズ</title>
+		<style>
+			body { background: whitesmoke; padding: 5px 10px 5px 10px; line-height: 1.5; }
+			h1 { font-size: 160%; color: black; margin-bottom: 0px; text-shadow: 3px 3px 3px lightgray; line-height: 1.5; margin-bottom: 0; }
+			h2 { font-size: 140%; color: black; text-shadow: 2px 2px 2px lightgray; }
+			h3 { font-size: 100%; color: black; text-shadow: 1px 1px 2px lightgray; }
+			div.indent { margin-left: 2em; }
+			div { padding-bottom: 0.5em; }
+			span.code { font-family: monospace; background-color: #fff0d0; border:1px solid #c0c0a0; border-radius: 0.2em; padding: 0.2em 0.2em; margin: 0 0.2em;}
+			div.code {white-space: pre-wrap; tab-size: 4; font-family: monospace; background-color: #fff0d0; border:1px solid #c0c0a0; border-radius: 0.2em; padding: 0.2em 0.2em; margin: 0.5em 0.2em;}
+			span.strong {font-weight: bold; color:red; }
+			table { font-size: 90%; border: solid 1px; background-color: #fff0f0;}
+			th { text-align: left; }
+			#canvas { float: right; width: 500px; height: 300px; }
+		</style>
+		<script type="importmap">
+		{
+		  "imports": {
+			"three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+			"three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+		  }
+		}
+		</script>
+	</head>
+	<body>
+		<h1>図形(geometry)のカスタマイズ<hr></h1>
+		<div id="canvas"></div>
+		<h2>概要</h2>
+		<div class="indent">
+			組み込みのGeometryに適切なものが存在しない場合、<ul>
+			<li>組み込みのGeometryを組み合わせる。</li>
+			<li>組み込みのGeometryをカスタマイズする。</li>
+			<li>一からGeometryを作る。</li>
+			</ul>の3種類のいずれかの方法をとるか、それらを組み合わせることになる。
+			<br>ここでは、「組み込みのGeometryをカスタマイズする」方法を使用して、右のような図形を作る方法を説明する。
+			<br>
+			<br>尚、図形は長細い直方体をx軸方向に半回転捩じった後、x軸方向をサインカーブ状に曲げたものである。
+		</div>
+		<br>
+		
+		<h2>カスタマイズの説明</h2>
+		<div class="indent">
+			THREEのGeometryはすべてBufferGeometryをベースにしている。
+			<br>BufferGeometryは、頂点位置、面インデックス、法線、色、UV座標等を持っている。
+			<ul>
+				<li>頂点位置は、<span class="code">geometry.attributes.position.array</span>。
+				x0, y0, z0, x1, y1, z1, ...の順序の<span class="code">Float32Array</span>で、<span class="code">array.length</span>個格納されている。</li>
+				<li>面インデックスは、<span class="code">geometry.index.array</span>。
+				THREEの面はすべて三角形であり、3つの頂点インデックスが連続した<span class="code">Uint16Array</span>で、<span class="code">array.length</span>個格納されている。</li>
+			</ul>
+			このため、ベースとするGeometryの頂点の位置を変更すればカスタマイズできる。
+			<br>尚、頂点位置を変更した場合には、<span class="code">geometry.computeVertexNormals();</span>によって、法線の更新も必要となる。
+			<br>
+			<br>今回の例では、BoxGeometryをカスタマイズするが、自然な変形となるように、widthSegmentsに大きな値を指定する。
+			<br><span class="code">new THREE.BoxGeometry(10, 1, 1, 100, 1, 1);</span>
+		</div>
+		
+		<script type="module">
+		import * as THREE from 'three';
+		import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+		const canvas = document.querySelector('#canvas');
+		function getWidth()  { return canvas.getBoundingClientRect().width; }
+		function getHeight() { return canvas.getBoundingClientRect().height; }
+
+		function changeGeometry(geometry, func) {
+			const pos = geometry.attributes.position;
+			const arr = pos.array;
+			for (let i = 0; i < arr.length; i += 3) { [arr[i], arr[i+1], arr[i+2]] = func([arr[i], arr[i+1], arr[i+2]]); }
+			pos.needsUpdate = true;
+			geometry.computeVertexNormals();
+			return geometry;
+		}
+		function modify1([x,y,z]) {
+			const theta = x/10*Math.PI*2;
+			return [x, Math.sin(theta)+y, z];
+		}		
+		function modify2([x,y,z]) {
+			const theta = x/10*Math.PI;
+			return [x, y*Math.cos(theta)-z*Math.sin(theta), y*Math.sin(theta)+z*Math.cos(theta)];
+		}
+		function modify3([x,y,z]) { return modify1(modify2([x,y,z])); }
+
+		// 空間(scene)を準備する。
+		const scene = new THREE.Scene();
+
+		// 描画対象の立方体を作って空間(scene)に配置する。
+		const geometry = changeGeometry(new THREE.BoxGeometry(10, 1, 1, 100, 1, 1), modify3);
+		const material = new THREE.MeshStandardMaterial({color: 0xffff00, metalness: 0.5, roughness: 0.5});
+		const mesh = new THREE.Mesh(geometry, material);
+		scene.add(mesh);
+	
+		// ライト(light)を作って空間(scene)に配置する。
+		const directionLight = new THREE.DirectionalLight(0xffffff, 3);
+		directionLight.position.set(1, 1, 1);
+		directionLight.target.position.set(0, 0, 0);
+		scene.add(directionLight);
+		const ambientLight = new THREE.AmbientLight(0x999999, 2);
+		scene.add(ambientLight);
+
+		// カメラ(camera)を作る。
+		const camera = new THREE.PerspectiveCamera(50, getWidth()/getHeight(), 0.1, 1000);
+		camera.position.set(-3, 3, 10);
+		camera.lookAt(0, 0, 0);
+
+		// レンダラ(renderer)を作って、空間(scene)とカメラ(camera)を設定する。
+		const renderer = new THREE.WebGLRenderer();
+		renderer.setSize(getWidth(), getHeight());
+		renderer.setClearColor(0xdddddd);
+		renderer.render(scene, camera);
+
+		// キャンバス(canvas)にレンダラ(renderer)を追加する。
+		canvas.appendChild(renderer.domElement);
+
+		const controls = new OrbitControls(camera, renderer.domElement);
+		function animate() {
+			controls.update();
+			renderer.setSize(getWidth(), getHeight());
+			renderer.render(scene, camera);
+		}
+		renderer.setAnimationLoop(animate);
+		</script>
+	</body>
+</html>

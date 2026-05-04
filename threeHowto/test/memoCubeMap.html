@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>横浜</title>
+  <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<script type="importmap">
+	{
+	  "imports": {
+		"three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+		"three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+	  }
+	}
+	</script>
+  <style>
+      html, body {
+          margin: 0;
+          overflow: hidden;
+          height: 100%;
+      }
+      #screen {
+        height: 100%;
+      }
+  </style>
+</head>
+<body>
+  <!-- 3D空間描画領域 -->
+  <div id="screen"></div>
+  
+		<script type="module">
+		import * as THREE from 'three';
+		import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+      /***** シーン *****/
+      var scene = new THREE.Scene();
+      
+      /***** カメラ *****/
+      var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
+      camera.position.z = 1;
+      camera.lookAt(scene.position);
+
+      /***** レンダラー *****/
+      var renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.getElementById('screen').appendChild(renderer.domElement);
+
+      /***** カメラのコントロール *****/
+      var orbitControls = new OrbitControls(camera,renderer.domElement);
+
+      /***** キューブマップ(全周囲の風景画像)の作成 *****/
+      var path = './';
+      var urls = [
+        path + 'posx.jpg', //右
+        path + 'negx.jpg', //左
+        path + 'posy.jpg', //上
+        path + 'negy.jpg', //下
+        path + 'posz.jpg', //前
+        path + 'negz.jpg'  //後
+      ]
+
+      var cubeTextureLoader = new THREE.CubeTextureLoader();
+      var textureCube = cubeTextureLoader.load(urls);
+
+      /***** キューブマップを内側に貼り付けた立法体の作成 *****/
+      var shader = THREE.ShaderLib['cube'];
+      shader.uniforms['tCube'].value = textureCube;
+
+      var material = new THREE.ShaderMaterial({
+        fragmentShader: shader.fragmentShader,
+        vertexShader: shader.vertexShader,
+        uniforms: shader.uniforms,
+        depthWrite: false,
+        side: THREE.BackSide
+      });
+
+      var cubeMesh = new THREE.Mesh(new THREE.BoxGeometry(100, 100, 100), material);
+      scene.add(cubeMesh);
+
+      /***** 関数 *****/
+      // 描画関数
+      var clock = new THREE.Clock();
+      function render() {
+        var delta = clock.getDelta();
+        orbitControls.update(delta);
+        requestAnimationFrame(render);
+        renderer.render(scene, camera);
+      }
+
+      /***** イベントリスナー *****/
+      // ウィンドウサイズ変更
+      window.addEventListener("resize", function() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        render();
+      });
+
+      // 描画
+      render();
+  </script>
+</body>
+</html>
