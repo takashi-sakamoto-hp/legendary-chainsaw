@@ -1905,10 +1905,22 @@
 	
 			const scene = new THREE.Scene();
 			const directionLight = new THREE.DirectionalLight(0xffffff, 3);
-			directionLight.position.set(1, 0.5, 1);
+			directionLight.position.set(30, 15, 30);
+			directionLight.castShadow = true;
+			directionLight.shadow.mapSize.width = 1024;
+			directionLight.shadow.mapSize.height = 1024;
+			directionLight.shadow.camera.left = -30;
+			directionLight.shadow.camera.right = 30;
+			directionLight.shadow.camera.top = 30;
+			directionLight.shadow.camera.bottom = -30;
+			directionLight.shadow.camera.near = 0.1;
+			directionLight.shadow.camera.far = 100;
+			directionLight.shadow.bias = -0.0001;
 			scene.add(directionLight);
 			const ambientLight = new THREE.AmbientLight(0x999999, 0.3);
 			scene.add(ambientLight);
+
+//			scene.add(new THREE.CameraHelper(directionLight.shadow.camera));
 			
 			const ferrisWheel = new FerrisWheel();
 			ferrisWheel.getObject().rotation.y = 0.5;
@@ -1931,11 +1943,21 @@
 			firework3.setPosition(0, 0, -2);
 			const actors = [ferrisWheel, merryGoRound, coffeeCup, train, symbol, fountain, firework1, firework2, firework3];
 //			const actors = [];
-			actors.forEach((actor) => scene.add(actor.getObject()));
+			actors.forEach((actor) => {
+				const object = actor.getObject();
+				object.traverse((obj) => {
+					if (obj instanceof THREE.Mesh) { obj.receiveShadow = true; obj.castShadow = true; }
+				});
+				scene.add(object);
+			});
 			
 			const drone = new Drone();
 			drone.setPosition(0, 6, 21);
-			scene.add(drone.getObject());
+			const object = drone.getObject();
+			object.traverse((obj) => {
+				if (obj instanceof THREE.Mesh) { obj.receiveShadow = true; obj.castShadow = true; }
+			});
+			scene.add(object);
 			
 			const bench1 = new Bench();
 			bench1.getObject().rotation.y = 0.7;
@@ -1952,35 +1974,41 @@
 			const bench5 = new Bench();
 			bench5.getObject().rotation.y = -0.7;
 			bench5.setPosition(16, 0, 6);
-			[getDesk(), bench1.getObject(), bench2.getObject(), bench3.getObject(), bench4.getObject(), bench5.getObject()].forEach((object) => scene.add(object));
+			[getDesk(), bench1.getObject(), bench2.getObject(), bench3.getObject(), bench4.getObject(), bench5.getObject()].forEach((object) => {
+				object.traverse((obj) => {
+					if (obj instanceof THREE.Mesh) { obj.receiveShadow = true; obj.castShadow = true; }
+				});
+				scene.add(object);
+			});
 			
 			const cameraFix = new THREE.PerspectiveCamera(75, getWidth()/getHeight(), 0.01, 1000);
 			cameraFix.position.set(0, 5, 20);
 			const renderer = new THREE.WebGLRenderer();
 			renderer.setSize(getWidth(), getHeight());
 			renderer.setClearColor(0xd0a050);
+			renderer.shadowMap.enabled = true;
 			const controls = new THREE.OrbitControls(cameraFix, renderer.domElement);
 			Object.assign(controls, {rotateSpeed: 0.5, enableDamping: true, dampingFactor: 0.05});
 
 			function setDaypart() {
 				if (document.querySelector('#evening[name="daypart"]').checked) {
-					directionLight.position.set(1, 0.5, 1);
+					directionLight.position.set(30, 10, 30);
 					directionLight.color = new THREE.Color().setHex(0xffffff);
-					directionLight.intensity = 2;
+					directionLight.intensity = 1.7;
 					ambientLight.color = new THREE.Color().setHex(0x999999);
 					ambientLight.intensity = 0.3;
 					renderer.setClearColor(0xd0a050);
 				}
 				else if (document.querySelector('#noon[name="daypart"]').checked) {
-					directionLight.position.set(0.5, 1, 0.5);
+					directionLight.position.set(30, 90, 30);
 					directionLight.color = new THREE.Color().setHex(0xffffff);
-					directionLight.intensity = 2.5;
+					directionLight.intensity = 1.6;
 					ambientLight.color = new THREE.Color().setHex(0x999999);
 					ambientLight.intensity = 1;
 					renderer.setClearColor(0x0080ff);
 				}
 				else if (document.querySelector('#night[name="daypart"]').checked) {
-					directionLight.position.set(1, 0.5, 1);
+					directionLight.position.set(30, 60, 30);
 					directionLight.color = new THREE.Color().setHex(0xffffff);
 					directionLight.intensity = 0;
 					ambientLight.color = new THREE.Color().setHex(0x999999);

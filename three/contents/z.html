@@ -1225,10 +1225,21 @@
 	
 			const scene = new THREE.Scene();
 			const directionLight = new THREE.DirectionalLight(0xffffff, 2);
-			directionLight.position.set(1, 1, 1);
+			directionLight.position.set(30, 50, 30);
 			directionLight.target.position.set(0, 0, 0);
+			directionLight.castShadow = true;
+			directionLight.shadow.mapSize.width = 1024;
+			directionLight.shadow.mapSize.height = 1024;
+			directionLight.shadow.camera.left = -70;
+			directionLight.shadow.camera.right = 70;
+			directionLight.shadow.camera.top = 50;
+			directionLight.shadow.camera.bottom = -50;
+			directionLight.shadow.camera.near = 0.1;
+			directionLight.shadow.camera.far = 100;
+			directionLight.shadow.bias = -0.0001;
 			scene.add(directionLight);
 			scene.add(new THREE.AmbientLight(0x999999, 1));
+//			scene.add(new THREE.CameraHelper(directionLight.shadow.camera));
 			
 			const field = new THREE.Mesh(new THREE.BoxGeometry(100, 1, 100), new THREE.MeshStandardMaterial({color: 0x31180c}));
 			field.position.set(0, -0.6, 0);
@@ -1245,13 +1256,19 @@
 			const renderer = new THREE.WebGLRenderer();
 			renderer.setSize(getWidth(), getHeight());
 			renderer.setClearColor(0xaaaaaa);
+			renderer.shadowMap.enabled = true;
 			canvas.appendChild(renderer.domElement);
 			
 			const camera = new THREE.PerspectiveCamera(70, getWidth()/getHeight(), 0.1, 1000);
 			const controls = new THREE.OrbitControls(camera, renderer.domElement);
 			Object.assign(controls, {rotateSpeed: 0.2, panSpeed: 0.3, enableDamping: true, dampingFactor: 0.05});
 
-			scene.add(field, z.getObject(), pilder.getObject());
+			[field, z.getObject(), pilder.getObject()].forEach((object) => {
+				object.traverse((obj) => {
+					if (obj instanceof THREE.Mesh) { obj.receiveShadow = true; obj.castShadow = true; }
+				});
+				scene.add(object)
+			});
 			camera.position.set(0, 8, 16);
 			controls.target = new THREE.Vector3(0, 8, -8);
 /*

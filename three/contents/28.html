@@ -41,6 +41,7 @@
 			import { VRButton } from 'https://unpkg.com/three@0.164.0/examples/jsm/webxr/VRButton.js';
 			import { XRControllerModelFactory } from 'https://unpkg.com/three@0.164.0/examples/jsm/webxr/XRControllerModelFactory.js';
 			import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+			import { Reflector } from 'three/addons/objects/Reflector.js';
 
 			class Iron28 {
 				#geometryMap = new Map();
@@ -674,6 +675,20 @@
 
 			const iron28 = new Iron28();
 			scene.add(iron28.getObject());
+
+			const mirror1 = new Reflector(
+				new THREE.PlaneGeometry(40, 28),
+				{clipBias: 0.003,　textureWidth: window.innerWidth * window.devicePixelRatio,　textureHeight: window.innerHeight * window.devicePixelRatio,　color: 0x777777}
+			);
+			mirror1.rotation.y =  Math.PI*0.2;
+			mirror1.position.set(-17, 0, -20);
+			const mirror2 = new Reflector(
+				new THREE.PlaneGeometry(40, 30),
+				{clipBias: 0.003,　textureWidth: window.innerWidth * window.devicePixelRatio,　textureHeight: window.innerHeight * window.devicePixelRatio,　color: 0x777777}
+			);
+			mirror2.rotation.y = -Math.PI*0.2;
+			mirror2.position.set( 17, 0, -20);
+			scene.add(mirror1, mirror2);
 
 			const renderer = new THREE.WebGLRenderer();
 			renderer.setSize(getWidth(), getHeight());
