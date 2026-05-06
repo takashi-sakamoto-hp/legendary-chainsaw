@@ -1920,7 +1920,8 @@
 			const ambientLight = new THREE.AmbientLight(0x999999, 0.3);
 			scene.add(ambientLight);
 
-//			scene.add(new THREE.CameraHelper(directionLight.shadow.camera));
+			cameraHelper = new THREE.CameraHelper(directionLight.shadow.camera);
+//			scene.add(cameraHelper);
 			
 			const ferrisWheel = new FerrisWheel();
 			ferrisWheel.getObject().rotation.y = 0.5;
@@ -2000,6 +2001,8 @@
 					directionLight.shadow.camera.near = 0.1;
 					directionLight.shadow.camera.far = 100;
 					directionLight.shadow.camera.updateProjectionMatrix();
+					cameraHelper.update()
+					
 					directionLight.color = new THREE.Color().setHex(0xffffff);
 					directionLight.intensity = 1.7;
 					ambientLight.color = new THREE.Color().setHex(0x999999);
@@ -2015,6 +2018,7 @@
 					directionLight.shadow.camera.near = 60;
 					directionLight.shadow.camera.far = 150;
 					directionLight.shadow.camera.updateProjectionMatrix();
+					cameraHelper.update()
 					
 					directionLight.color = new THREE.Color().setHex(0xffffff);
 					directionLight.intensity = 1.6;
@@ -2031,6 +2035,8 @@
 					directionLight.shadow.camera.near = 0.1;
 					directionLight.shadow.camera.far = 100;
 					directionLight.shadow.camera.updateProjectionMatrix();
+					cameraHelper.update()
+
 					directionLight.color = new THREE.Color().setHex(0xffffff);
 					directionLight.intensity = 0;
 					ambientLight.color = new THREE.Color().setHex(0x999999);
