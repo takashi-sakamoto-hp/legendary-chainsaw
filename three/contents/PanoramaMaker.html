@@ -18,12 +18,12 @@
 			<label><input type="radio" name="resolution" value="2048"			>2048</label>
 			<label><input type="radio" name="resolution" value="4096" checked	>4096</label>
 			<label><input type="radio" name="resolution" value="8192"			>8192</label>
+			<label><input type="radio" name="resolution" value="16384"			>16384</label>
 	</div>
 	<div>
 		<span class="title">種類</span>
-			<label><input type="radio" name="geometry" value="Cylinder" checked	>円筒</label>
-			<label><input type="radio" name="geometry" value="Sphere"			>球</label>
-			<label><input type="radio" name="geometry" value="HalfSphere"		>半球</label>
+			<label><input type="radio" name="geometry" value="Sphere"				>球</label>
+			<label><input type="radio" name="geometry" value="HalfSphere" checked	>半球</label>
 	</div>
 	<br>
 	<label for="imageFile" id="selectButton">パノラマ写真を選択してください</label><input id="imageFile" type="file">
@@ -96,31 +96,24 @@
 		import * as THREE from 'three';
 		import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-		function createCylinder(texture) {
-			const radius = 1;
-			const height = (2*Math.PI*radius)/(texture.image.width/texture.image.height);
-			const geo = new THREE.CylinderGeometry(radius, radius, height, 64, 1, true);
-			const mat = new THREE.MeshBasicMaterial({map: texture, side: THREE.BackSide});
-			return new THREE.Mesh(geo, mat);
-		}
 		function createSphere(texture) {
-			const radius = 1;
+			const radius = 3;
 			const geo = new THREE.SphereGeometry(radius, 64, 32);
 			const mat = new THREE.MeshBasicMaterial({map: texture, side: THREE.BackSide});
 			const mesh = new THREE.Mesh(geo, mat);
 			const texAspect = texture.image.width/texture.image.height;
 			const sphereAspect = 2;
-			mesh.scale.set(texAspect/sphereAspect, 1, 1);
+			mesh.scale.set(texAspect/sphereAspect, 1, texAspect/sphereAspect);
 			return mesh;
 		}
 		function createHalfSphere(texture) {
-			const radius = 1;
+			const radius = 3;
 			const geo = new THREE.SphereGeometry(radius, 64, 32, 0, Math.PI*2, 0, Math.PI/2);
 			const mat = new THREE.MeshBasicMaterial({map: texture, side: THREE.BackSide});
 			const mesh = new THREE.Mesh(geo, mat);
 			const texAspect = texture.image.width/texture.image.height;
-			const sphereAspect = 2;
-			mesh.scale.set(texAspect/sphereAspect, 1, 1);
+			const halfSphereAspect = 4;
+			mesh.scale.set(texAspect/halfSphereAspect, 1, texAspect/halfSphereAspect);
 			return mesh;
 		}
 		const scene = new THREE.Scene();
@@ -138,6 +131,10 @@
 		document.getElementById('canvas').appendChild(renderer.domElement);
 
 		const orbitControls = new OrbitControls(camera,renderer.domElement);
+		camera.position.y = 1;
+		orbitControls.target.y = 1;
+		orbitControls.update();
+		
 		function update() {
 			orbitControls.update();
 			requestAnimationFrame(update);
