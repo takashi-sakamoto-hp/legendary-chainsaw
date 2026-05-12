@@ -23,6 +23,7 @@
 		<span class="title">種類</span>
 			<label><input type="radio" name="geometry" value="Cylinder" checked	>円筒</label>
 			<label><input type="radio" name="geometry" value="Sphere"			>球</label>
+			<label><input type="radio" name="geometry" value="HalfSphere"		>半球</label>
 	</div>
 	<br>
 	<label for="imageFile" id="selectButton">パノラマ写真を選択してください</label><input id="imageFile" type="file">
@@ -112,8 +113,20 @@
 			mesh.scale.set(texAspect/sphereAspect, 1, 1);
 			return mesh;
 		}
+		function createHalfSphere(texture) {
+			const radius = 1;
+			const geo = new THREE.SphereGeometry(radius, 64, 32, 0, Math.PI*2, 0, Math.PI/2);
+			const mat = new THREE.MeshBasicMaterial({map: texture, side: THREE.BackSide});
+			const mesh = new THREE.Mesh(geo, mat);
+			const texAspect = texture.image.width/texture.image.height;
+			const sphereAspect = 2;
+			mesh.scale.set(texAspect/sphereAspect, 1, 1);
+			return mesh;
+		}
 		const scene = new THREE.Scene();
 		const texture = new THREE.TextureLoader().load('${base64}', () => {
+			texture.wrapS = THREE.RepeatWrapping;
+			texture.repeat.x = -1;
 			const mesh = create${geometryType}(texture);
 			scene.add(mesh);
 		});
