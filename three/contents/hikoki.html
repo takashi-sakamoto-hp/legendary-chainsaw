@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<style>
+		#canvas		{ position: absolute; top: 0px; left: 0px; z-index: 0; }
+		</style>
+		<script type="importmap">
+		{
+		  "imports": {
+			"three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+			"three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+		  }
+		}
+		</script>
+	</head>
+	<body>
+		<div id="canvas" style="width: 100%; height: 100%;"></div>
+		<script type="module">
+		import * as THREE from 'three';
+		import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+		class Hikoki {
+			#object;
+			getPolygon(points, front, back) {
+				const lpoints = [];
+				const lp0 = new THREE.Vector3(0, 0, 0);
+				lpoints.push(lp0);
+				for (let i = 1; i < points.length; ++i) { lpoints.push(points[i].clone().sub(points[0])); }
+				const geometry = new THREE.BufferGeometry().setFromPoints(lpoints);
+				const indices = [];
+				for (let i = 1; i < points.length-1; ++i) { indices.push(0, i, i+1); }
+				geometry.setIndex(indices);
+				geometry.computeVertexNormals();
+				const object = new THREE.Group();
+				object.add(new THREE.Mesh(geometry, front));
+				object.add(new THREE.Mesh(geometry, back));
+				object.position.copy(points[0]);
+				return object;
+			}
+			
+			#g1;
+			#g1o11;
+			#g1o2;
+			#g1o21;
+			
+			#g2;
+			#g2o1;
+			
+			#g3;
+			#g3o1;
+			#g3o3;
+			
+			#g4;
+			#g4o1;
+			
+			#g5;
+			#g5o1;
+			#g5o11;
+			#g5o2;
+			#g5o21;
+
+			#p = [];
+			constructor() {
+				const W = 10;
+				const H = 14;
+				const L = 1;
+				const R2 = Math.sqrt(2);
+				const XX = (H-W/2-L)/(1+R2);
+				const points = [
+																[0, 0],														// p0
+					[-W/2,	W/2+L],								[0,	W/2+L],							[W/2,	W/2+L],			// p1-p3
+					[-W/2,	L],									[0,	L],								[W/2,	L],				// p4-p6
+					[-W/2,	-H+W/2+L],							[0, -H+W/2+L],						[W/2,	-H+W/2+L],		// p7-p9
+					[-W/2,	0],																		[W/2,	0],				// p10-p11
+					[-W/2,	-L],																	[W/2,	-L],			// p12-p13
+									[-(W/2+L)/2,	-(W/2+L)/2],	[(W/2+L)/2,	-(W/2+L)/2],								// p14-p15
+					[-W/2,	-W/2],		[-L,	-W/2],			[0,	-W/2],		[L,	-W/2],			[W/2,	-W/2],			// p16-p20
+																[0,	-W/2-L],												// p21
+								[-W/2*1/(1+R2),	-W/2],				[W/2*1/(1+R2),	-W/2],								// p22-p23
+							[-XX,	-H+W/2+L],								[XX,	-H+W/2+L],								// p24-p25
+
+				];
+				points.forEach(([x,y]) => this.#p.push(new THREE.Vector3(x, y, 0)));
+				const FRONT_1	= new THREE.MeshStandardMaterial({color: 0xff0000, side: THREE.FrontSide});
+				const FRONT_2	= new THREE.MeshStandardMaterial({color: 0xffffff, side: THREE.FrontSide});
+				const FRONT_3	= new THREE.MeshStandardMaterial({color: 0x00ff00, side: THREE.FrontSide});
+				const BACK_1	= new THREE.MeshStandardMaterial({color: 0xffffff, side: THREE.BackSide});
+				const BACK_2	= new THREE.MeshStandardMaterial({color: 0xff0000, side: THREE.BackSide});
+				
+				this.#object = new THREE.Group();
+				// group 1
+				{
+					this.#g1 = new THREE.Group();
+					const g1o1 = new THREE.Group();
+					this.#g1o11 = this.getPolygon([this.#p[4], this.#p[2], this.#p[1]], FRONT_1, BACK_1); 
+					const g1o12 = this.getPolygon([this.#p[2], this.#p[4], this.#p[7], this.#p[8]], FRONT_1, BACK_1);  
+					g1o1.add(this.#g1o11, g1o12);
+					this.#g1o2 = new THREE.Group();
+					this.#g1o21 = this.getPolygon([this.#p[2], this.#p[6],this.#p[3]], FRONT_1, BACK_1); 
+					const g1o22 = this.getPolygon([this.#p[2], this.#p[8], this.#p[9], this.#p[6]], FRONT_1, BACK_1); 
+					this.#g1o2.add(this.#g1o21, g1o22);
+					this.#g1.add(g1o1, this.#g1o2);
+				}
+				// group 2
+				{
+					this.#g2 = new THREE.Group();
+					this.#g2o1 = new THREE.Group();
+					const g2o11 = new THREE.Group();
+					const g2o111 = this.getPolygon([this.#p[10], this.#p[0], this.#p[5], this.#p[4]], FRONT_1, BACK_1); 
+					const g2o112 = this.getPolygon([this.#p[0], this.#p[11], this.#p[6], this.#p[5]], FRONT_1, BACK_1); 
+					g2o11.add(g2o111, g2o112); 
+					const g2o12 = new THREE.Group();
+					const g2o121 = this.getPolygon([this.#p[4], this.#p[5], this.#p[2]], FRONT_2, BACK_1); 
+					const g2o122 = this.getPolygon([this.#p[5], this.#p[6], this.#p[2]], FRONT_2, BACK_1); 
+					g2o12.add(g2o121, g2o122); 
+					this.#g2o1.add(g2o11, g2o12);
+					const g2o2 = new THREE.Group();
+					const g2o21 = this.getPolygon([this.#p[0], this.#p[10], this.#p[7], this.#p[8]], FRONT_1, BACK_1); 
+					const g2o22 = this.getPolygon([this.#p[11], this.#p[0], this.#p[8], this.#p[9]], FRONT_1, BACK_1); 
+					g2o2.add(g2o21, g2o22); 
+					this.#g2.add(this.#g2o1, g2o2);
+				}
+				// group3
+				{
+					this.#g3 = new THREE.Group();
+					this.#g3o1 = new THREE.Group();
+					const g3o11 = this.getPolygon([this.#p[14], this.#p[0], this.#p[10], this.#p[12]], FRONT_2, BACK_1);
+					const g3o12 = this.getPolygon([this.#p[16], this.#p[14], this.#p[12]], FRONT_1, BACK_1);
+					this.#g3o1.add(g3o11, g3o12);
+					const g3o2 = new THREE.Group();
+					const g3o21 = this.getPolygon([this.#p[14], this.#p[21], this.#p[0]], FRONT_2, BACK_1);
+					const g3o22 = this.getPolygon([this.#p[14], this.#p[16], this.#p[7], this.#p[8], this.#p[21]], FRONT_1, BACK_1);
+					g3o2.add(g3o21, g3o22);
+					this.#g3o3 = new THREE.Group();
+					const g3o31 = this.getPolygon([this.#p[0], this.#p[15], this.#p[13], this.#p[11]], FRONT_2, BACK_1);
+					const g3o32 = this.getPolygon([this.#p[15], this.#p[20], this.#p[13]], FRONT_1, BACK_1);
+					this.#g3o3.add(g3o31, g3o32);
+					const g3o4 = new THREE.Group();
+					const g3o41 = this.getPolygon([this.#p[15], this.#p[0], this.#p[21]], FRONT_2, BACK_1);
+					const g3o42 = this.getPolygon([this.#p[20], this.#p[15], this.#p[21], this.#p[8], this.#p[9]], FRONT_1, BACK_1);
+					g3o4.add(g3o41, g3o42);
+					this.#g3.add(this.#g3o1, g3o2, this.#g3o3, g3o4);
+				}
+				// group 4
+				{
+					this.#g4 = new THREE.Group();
+					this.#g4o1 = new THREE.Group();
+					const g4o11 = this.getPolygon([this.#p[18], this.#p[17], this.#p[21]], FRONT_2, BACK_1);
+					g4o11.position.sub(this.#p[18]);
+					const g4o12 = this.getPolygon([this.#p[19], this.#p[18], this.#p[21]], FRONT_2, BACK_1);
+					g4o12.position.sub(this.#p[18]);
+					this.#g4o1.add(g4o11, g4o12);
+					this.#g4o1.position.add(this.#p[18]);
+					const g4o2 = new THREE.Group();
+					const g4o21 = this.getPolygon([this.#p[16], this.#p[18], this.#p[0]], FRONT_2, BACK_1);
+					const g4o22 = this.getPolygon([this.#p[18], this.#p[16], this.#p[7], this.#p[8]], FRONT_1, BACK_1);
+					const g4o23 = this.getPolygon([this.#p[18], this.#p[20], this.#p[0]], FRONT_2, BACK_1);
+					const g4o24 = this.getPolygon([this.#p[20], this.#p[18], this.#p[8], this.#p[9]], FRONT_1, BACK_1);
+					g4o2.add(g4o21, g4o22, g4o23, g4o24);
+					g4o2.position.z = -0.0001;
+					this.#g4.add(this.#g4o1, g4o2);
+				}
+				// group 5
+				{
+					this.#g5 = new THREE.Group();
+					this.#g5o1 = new THREE.Group();
+					this.#g5o11 = new THREE.Group();
+					const g5o111 = this.getPolygon([this.#p[22], this.#p[0], this.#p[16]], FRONT_2, BACK_1);
+					const g5o112 = this.getPolygon([this.#p[24], this.#p[22], this.#p[16], this.#p[7]], FRONT_1, BACK_1);
+					this.#g5o11.add(g5o111, g5o112);
+					const g5o12 = new THREE.Group();
+					const g5o121 = this.getPolygon([this.#p[18], this.#p[0], this.#p[22]], FRONT_2, BACK_1);
+					const g5o122 = this.getPolygon([this.#p[8], this.#p[18], this.#p[22], this.#p[24]], FRONT_1, BACK_1);
+					g5o12.add(g5o121, g5o122);
+					this.#g5o1.add(this.#g5o11, g5o12);
+					
+					this.#g5o2 = new THREE.Group();
+					this.#g5o21 = new THREE.Group();
+					const g5o211 = this.getPolygon([this.#p[0], this.#p[23], this.#p[20]], FRONT_2, BACK_1);
+					const g5o212 = this.getPolygon([this.#p[23], this.#p[25], this.#p[9], this.#p[20]], FRONT_1, BACK_1);
+					this.#g5o21.add(g5o211, g5o212);
+					const g5o22 = new THREE.Group();
+					const g5o221 = this.getPolygon([this.#p[0], this.#p[18], this.#p[23]], FRONT_2, BACK_1);
+					const g5o222 = this.getPolygon([this.#p[18], this.#p[8], this.#p[25], this.#p[23]], FRONT_1, BACK_1);
+					g5o22.add(g5o221, g5o222);
+					this.#g5o2.add(this.#g5o21, g5o22);
+					this.#g5.add(this.#g5o1, this.#g5o2);
+
+//					const test1 = this.getPolygon([this.#p[0], this.#p[22], this.#p[23]], FRONT_3, BACK_1);
+//					const test2 = this.getPolygon([this.#p[22], this.#p[24], this.#p[25], this.#p[23]], FRONT_3, BACK_1);
+//					test1.position.z = 0.01;
+//					test2.position.z = 0.01;
+//					this.#g5.add(this.#g5o1, this.#g5o2, test1, test2);
+				}
+				this.#object.add(this.#g1, this.#g2, this.#g3, this.#g4, this.#g5);
+				this.#g1.visible = true;
+				this.#g2.visible = false;
+				this.#g3.visible = false;
+				this.#g4.visible = false;
+				this.#g5.visible = false;
+			}
+			getObject() { return this.#object; }
+			#nextStep = 0;
+			#waitTime = 0;
+			#rotateTime = 0;
+			#moveTime = 0;
+			#q;
+			#target;
+			#origin;
+			setRotateParameter(orgPoint, axisPoint, object, angle) {
+				const axis = new THREE.Vector3().subVectors(axisPoint, orgPoint).normalize();
+				this.#q = new THREE.Quaternion().setFromAxisAngle(axis, angle/this.#rotateTime);
+				this.#target = object;
+				this.#origin = orgPoint;
+			}
+			animate() {
+				if (this.#waitTime > 0) {
+					--this.#waitTime;
+					return;
+				}
+				if (this.#rotateTime > 0) {
+					--this.#rotateTime;
+					this.#target.position.sub(this.#origin);
+					this.#target.applyQuaternion(this.#q);
+					this.#target.position.add(this.#origin);
+					return;
+				}
+				if (this.#moveTime > 0) {
+					--this.#moveTime;
+					this.#object.position.z -= 1;
+					return;
+				}
+				const [rotateTime, waitTime] = [50, 20];
+				switch (this.#nextStep) {
+				case 0:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 1];
+					this.setRotateParameter(this.#p[0], this.#p[2], this.#g1o2, -(Math.PI-0.01));
+					break;
+				case 1:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 2];
+					this.setRotateParameter(this.#p[0], this.#p[2], this.#g1o2, (Math.PI-0.01));
+					break;
+				case 2:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 3];
+					this.setRotateParameter(this.#p[4], this.#p[2], this.#g1o11, (Math.PI-0.01));
+					break;
+				case 3:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 4];
+					this.setRotateParameter(this.#p[6], this.#p[2], this.#g1o21, -(Math.PI-0.01));
+					break;
+				case 4:
+					this.#g1.visible = false;
+					this.#g2.visible = true;
+					this.#nextStep = 5;
+					break;
+				
+				case 5:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 6];
+					this.setRotateParameter(this.#p[10], this.#p[11], this.#g2o1, (Math.PI-0.01));
+					break;
+				case 6:
+					this.#g2.visible = false;
+					this.#g3.visible = true;
+					this.#nextStep = 7;
+					break;
+
+				case 7:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 8];
+					this.setRotateParameter(this.#p[14], this.#p[0], this.#g3o1, (Math.PI-0.01));
+					break;
+				case 8:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 9];
+					this.setRotateParameter(this.#p[15], this.#p[20], this.#g3o3, (Math.PI-0.01));
+					break;
+				case 9:
+					this.#g3.visible = false;
+					this.#g4.visible = true;
+					this.#nextStep = 10;
+					break;
+				
+				case 10:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 11];
+					this.setRotateParameter(this.#p[18], this.#p[17], this.#g4o1, (Math.PI-0.01));
+					break;
+				case 11:
+					this.#g4.visible = false;
+					this.#g5.visible = true;
+					this.#nextStep = 12;
+					break;
+					
+				case 12:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 13];
+					this.setRotateParameter(this.#p[0], this.#p[18], this.#g5o1, (Math.PI-0.1));
+					break;
+				case 13:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 14];
+					this.setRotateParameter(new THREE.Vector3(0,0,0), new THREE.Vector3(0.5,0,1), this.#object, (Math.PI/2));
+					break;
+				case 14:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 15];
+					this.setRotateParameter(this.#p[22], this.#p[0], this.#g5o11, (Math.PI/2));
+					break;
+				case 15:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 16];
+					this.setRotateParameter(this.#p[0], this.#p[23], this.#g5o21, (Math.PI/2));
+					break;
+				case 16:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 17];
+					this.setRotateParameter(new THREE.Vector3(0,0,0), new THREE.Vector3(0,-1,0), this.#object, (Math.PI*3/5));
+					break;
+				case 17:
+					[this.#rotateTime, this.#waitTime, this.#nextStep] = [rotateTime, waitTime, 18];
+					this.setRotateParameter(new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-0.10), this.#object, (Math.PI*1/7));
+					break;
+				case 18:
+					this.#moveTime = 10000;
+					this.#nextStep = 99;
+				default:
+					break;
+				}
+			}
+		}
+		
+		let animating = false;
+		
+		const canvas = document.querySelector('#canvas');
+		function getWidth()  { return canvas.getBoundingClientRect().width; }
+		function getHeight() { return canvas.getBoundingClientRect().height; }
+
+		const scene = new THREE.Scene();
+
+		const light = new THREE.DirectionalLight(0xffffff, 3, 0.1, 1000);
+		light.castShadow = true;
+		light.position.set(1, 1, 1);
+		scene.add(light);
+
+		const ambientLight = new THREE.AmbientLight(0x999999, 2);
+		scene.add(ambientLight);
+
+		const camera = new THREE.PerspectiveCamera(50, getWidth()/getHeight(), 0.1, 1000);
+		camera.position.set(0, 0, 30);
+		camera.lookAt(0, 0, 0);
+
+		const hikoki = new Hikoki();
+		scene.add(hikoki.getObject());
+		
+		const renderer = new THREE.WebGLRenderer();
+		renderer.shadowMap.enabled = true;
+		renderer.setSize(getWidth(), getHeight());
+		renderer.setClearColor(0xaaaa88);
+		renderer.render(scene, camera);
+
+		canvas.appendChild(renderer.domElement);
+
+		const controls = new OrbitControls(camera, renderer.domElement);
+		function animate() {
+			controls.update();
+			renderer.setSize(getWidth(), getHeight());
+			renderer.render(scene, camera);
+			if (animating) { hikoki.animate(); }
+		}
+		renderer.setAnimationLoop(animate);
+
+		canvas.addEventListener('click', () => { animating = true; });
+		</script>
+	</body>
+</html>
