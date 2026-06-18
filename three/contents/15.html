@@ -31,8 +31,8 @@
 		</div>
 		<div id="info">
 			<table>
-				<tr><th>LEVEL</th><td id="level">0</td></tr>
-				<tr><th>MOVE LIMIT</th><td id="moveCount">0</td></tr>
+				<tr><th>LEVEL</th><td id="level">0</td><td style="text-align: right; width: 200px;"><span id="debug" style="color: #505050;">.</span></td></tr>
+				<tr><th>MOVE LIMIT</th><td id="moveCount">0</td><td id="debugDisp" style="font-size: 15px; text-align: right; width: 200px;"></td></tr>
 			</table>
 		</div>
 		<div id="info2" style="display: none;">
@@ -204,15 +204,19 @@ const img12 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6P
 				piecesArray.push(await createPieces(await toImage(info.img, info.type), FIELD.ROWS, FIELD.COLS));
 			}
 
-			const canvas		= document.querySelector('#canvas');
-			const moveCountTag	= document.querySelector('#moveCount');
-			const levelTag		= document.querySelector('#level');
-			const telopBox		= document.querySelector('#telop');
-			const telopText		= telopBox.querySelector("#text");
-			const giveUp		= document.querySelector('#giveup');
+			const canvas		= document.getElementById('canvas');
+			const moveCountTag	= document.getElementById('moveCount');
+			const levelTag		= document.getElementById('level');
+			const telopBox		= document.getElementById('telop');
+			const telopText		= telopBox.querySelector('#text');
+			const giveUp		= document.getElementById('giveup');
+			const bDebug		= document.getElementById('debug');
+			const dDebug		= document.getElementById('debugDisp');
 			function getWidth()  { return canvas.getBoundingClientRect().width; }
 			function getHeight() { return canvas.getBoundingClientRect().height; }
-
+			bDebug.addEventListener('click', () => { if (inTelop()) { dDebug.textContent = 'Debug mode'; }})
+			function isDebug() { return dDebug.textContent == 'Debug mode'; }
+			
 			function setTelop(str) {
 				console.log(str);
 				return new Promise(resolve => {
@@ -501,8 +505,8 @@ const img12 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6P
 					case ANIMATION_MODE.SHUFFLE: {
 						if (moveDelta(selectedIndex, direction, 1 - animateStep/ANIMATION_TIME.SHUFFLE) != 1) { return; }
 						if (checkComplete()) { setMoveCount(0); } else { setMoveCount(getMoveCount()+1); }
-						if (getMoveCount() < 2*getLevel()-1) {
-//						if (getMoveCount() < 1) {
+						const limit = (isDebug)?1:(2*getLevel()-1);
+						if (getMoveCount() < limit) {
 							[selectedIndex, direction] = getRandomIndexDirection(direction);
 							animateStep = ANIMATION_TIME.SHUFFLE;
 							return;
