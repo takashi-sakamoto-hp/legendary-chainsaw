@@ -6,8 +6,10 @@
 		<title>15パズル</title>
 		<style>
 			#telop  { position: absolute; top: 30%; left: 0%; z-index: 2; width: 100%; overflow: hidden; white-space: nowrap; text-align: center; display: none; }
-			#info   { position: absolute; top: 15px; left: 15px; z-index: 1; color: white; font-size: 150%; }
+			#info   { position: absolute; top: 15px; left: 15px; z-index: 1; color: white; }
+			#info2  { position: absolute; bottom: 15px; right: 15px; z-index: 2; color: white; }
 			#canvas { position: absolute; top: 0px; left: 0px; z-index: 0; }
+			table,button { font-size: 200%; }
 			th { text-align: left;}
 			td { width: 3em; text-align: right; }
 			#telop #text { display: inline-block; padding: 2% 6%; font-size: 800%; color: yellow; background: black; white-space: pre; }
@@ -32,6 +34,9 @@
 				<tr><th>LEVEL</th><td id="level">0</td></tr>
 				<tr><th>MOVE LIMIT</th><td id="moveCount">0</td></tr>
 			</table>
+		</div>
+		<div id="info2" style="display: none;">
+			<button id="giveup">Give Up</button>
 		</div>
 		<div id="canvas" style="width: 100%; height: 100%;"></div>
 		<script type="module">
@@ -190,9 +195,9 @@ const img12 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6P
 			const FIELD = {ROWS: 4, COLS: 4};
 			const DIRECTION = {NONE: 0, LEFT: 1, RIGHT: 2, UP: 3, DOWN: 4};
 			const MODE = {START: 0, RUNNING: 1};
-			const ANIMATION_MODE = {NONE: 0, START: 1, SHUFFLE: 2, MOVE: 3, END: 4, END2: 5, FAIL: 6, FAIL2: 7};
+			const ANIMATION_MODE = {NONE: 0, START: 1, SHUFFLE: 2, MOVE: 3, END: 4, END2: 5, FAIL: 6, FAIL2: 7, GIVEUP: 8};
 			const SHUFFLE_MOVE = 7;
-			const ANIMATION_TIME = {NONE: 0, START: 100, SHUFFLE: SHUFFLE_MOVE, MOVE: 30, END: 100, FAIL: 10};
+			const ANIMATION_TIME = {NONE: 0, START: 100, SHUFFLE: SHUFFLE_MOVE, MOVE: 30, END: 100, FAIL: 10, GIVEUP: 10};
 
 			const piecesArray = [];
 			for (const info of IMAGE_INFOS) {
@@ -204,6 +209,7 @@ const img12 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6P
 			const levelTag		= document.querySelector('#level');
 			const telopBox		= document.querySelector('#telop');
 			const telopText		= telopBox.querySelector("#text");
+			const giveUp		= document.querySelector('#giveup');
 			function getWidth()  { return canvas.getBoundingClientRect().width; }
 			function getHeight() { return canvas.getBoundingClientRect().height; }
 
@@ -355,7 +361,6 @@ const img12 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6P
 
 			let pieces = null;
 			function getPieces(index) { return piecesArray[(index)%piecesArray.length]; }
-//			async function getPieces(index) { return await createPieces(await toImage(IMAGE_INFOS[index].img, IMAGE_INFOS[index].type), FIELD.ROWS, FIELD.COLS); }
 			function getLevel() { return Number(levelTag.textContent); }
 			async function setLevel(value) {
 				if (value == getLevel()) { return; }
@@ -469,6 +474,12 @@ const img12 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6P
 				camera.updateProjectionMatrix();
 				renderer.setSize(window.innerWidth, window.innerHeight);
 			});
+			giveup.addEventListener('click', () => {
+				animateMode = ANIMATION_MODE.GIVEUP;
+				animateStep = ANIMATION_TIME.GIVEUP;
+				animating = true;
+				animateWait = 0;
+			});
 			function animate() {
 				requestAnimationFrame(animate);
 				renderer.render(scene, camera);
@@ -476,7 +487,6 @@ const img12 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6P
 				if (animateWait != 0) { --animateWait; return; }
 				if (!animating) { return; }
 				--animateStep;
-				console.log(animateMode);
 				switch (animateMode) {
 					case ANIMATION_MODE.START: {
 						if (move(removed.object, removed.pos, keepPos, 1 - animateStep/ANIMATION_TIME.START) != 1) { return; }
@@ -497,6 +507,7 @@ const img12 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6P
 							animateStep = ANIMATION_TIME.SHUFFLE;
 							return;
 						}
+						info2.style.display = 'block';
 						mode = MODE.RUNNING;
 						animating = false;
 					}
@@ -523,6 +534,7 @@ const img12 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6P
 					break;
 					
 					case ANIMATION_MODE.END: {
+						info2.style.display = 'none';
 						if (move(removed.object, keepPos, removed.pos, 1 - animateStep/ANIMATION_TIME.END) != 1) { return; }
 						if (animateStep > 0) { return; }
 						setTelop(`GAME CLEAR. Next Level ${getLevel()+1}`);
@@ -540,8 +552,17 @@ const img12 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6P
 					break;
 
 					case ANIMATION_MODE.FAIL: {
+						info2.style.display = 'none';
 						if (animateStep > 0) { return; }
 						setTelop(`GAME OVER. Retry. (Level ${getLevel()})`);
+						animateMode = ANIMATION_MODE.FAIL2;
+					}
+					break;
+
+					case ANIMATION_MODE.GIVEUP: {
+						info2.style.display = 'none';
+						if (animateStep > 0) { return; }
+						setTelop(`GIVE UP. Retry. (Level ${getLevel()})`);
 						animateMode = ANIMATION_MODE.FAIL2;
 					}
 					break;
