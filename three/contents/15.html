@@ -505,7 +505,6 @@ const img12 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6P
 					case ANIMATION_MODE.SHUFFLE: {
 						if (moveDelta(selectedIndex, direction, 1 - animateStep/ANIMATION_TIME.SHUFFLE) != 1) { return; }
 						if (checkComplete()) { setMoveCount(0); } else { setMoveCount(getMoveCount()+1); }
-						console.log(isDebug());
 						const limit = (isDebug())?1:(2*getLevel()-1);
 						if (getMoveCount() < limit) {
 							[selectedIndex, direction] = getRandomIndexDirection(direction);
