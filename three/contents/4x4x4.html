@@ -13,10 +13,10 @@
 		</style>
 		<script type="importmap">
 			{
-			  "imports": {
-				"three": "https://unpkg.com/three@0.164.0/build/three.module.js",
-				"three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
-			  }
+				"imports": {
+					"three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+					"three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+				}
 			}
 		</script>
 	</head>
@@ -25,16 +25,8 @@
 			<div id="text"></div>
 		</div>
 		<div id="control">
-			<span>黒</span>
-			<select id="blackPlayer">
-				<option value="player">PLAYER</option>
-				<option value="cpu1">CPU1</option>
-			</select>
-			<span style="margin-left: 20px;">白</span>
-			<select id="whitePlayer">
-				<option value="player">PLAYER</option>
-				<option value="cpu1">CPU1</option>
-			</select>
+			<span>黒</span><select id="blackPlayer"><option value="player" selected>PLAYER</option><option value="cpu1">CPU1</option></select>
+			<span style="margin-left: 20px;">白</span><select id="whitePlayer"><option value="player">PLAYER</option><option value="cpu1" selected>CPU1</option></select>
 			<br><br>
 			<button id="start" style="display: block;">ゲームスタート</button>
 			<span id="turn"></span><br><span id="message"></span>
@@ -90,6 +82,8 @@
 			const PIECE = {NONE: 'NONE', BLACK: 'BLACK', WHITE: 'WHITE'};
 			const LINE	= {NONE: 'NONE', X: 'X', Y: 'Y', Z: 'Z', XY1: 'XY1', XY2: 'XY2', XZ1: 'XZ1', XZ2: 'XZ2', YZ1: 'YZ1', YZ2: 'YZ2', XYZ1: 'XYZ1', XYZ2: 'XYZ2', XYZ3: 'XYZ3', XYZ4: 'XYZ4'};
 			const TIME = {DROP: 10};
+			const CPU_RETRY_MAX = 10;
+			
 			const fields		= [];
 			let field			= [];
 			const winLines		= [];
@@ -127,16 +121,10 @@
 				selectedStick.material = MAT_STICK;
 				selectedStick = null;
 			}
-			function getSelectedStick() {
-				return selectedStick;
-			}
+			function getSelectedStick() { return selectedStick; }
 			function xyzToIndex(x, y, z) { return y*REN*REN + z*REN + x; }
-			function backupField() {
-				fields.push([...field]);
-			}
-			function restoreField() {
-				field = fields.pop();
-			}
+			function backupField() { fields.push([...field]); }
+			function restoreField() { field = fields.pop(); }
 			function getField(x, y, z) { return field[xyzToIndex(x, y, z)]; }
 			function setField(x, y, z, value) { field[xyzToIndex(x, y, z)] = value; }
 
@@ -207,17 +195,15 @@
 				if (pos === null) {
 					pos = getWinPosition(enemy);
 				}
-				while (pos === null) {
+				let retryCount = 0;
+				while (pos === null && retryCount < CPU_RETRY_MAX) {
 					pos = getRandomPosition();
 					// ToDo: 相手が勝つ位置には置かない
-					if (pos.y != REN-1) {
-						backupField();
-						setField(pos.x, pos.y, pos.z, turn);
-						const pos2 = getWinPosition(enemy);
-						console.log(pos2);
-						if (pos2 !== null) { pos = null; }
-						restoreField();
-					}
+					if (pos.y == REN-1) { break; }
+					backupField();
+					setField(pos.x, pos.y, pos.z, turn);
+					if (getWinPosition(enemy) !== null) { pos = null; ++retryCount; }
+					restoreField();
 				}
 				const mesh = createPiece((turn == PIECE.WHITE)?MAT_WHITE:MAT_BLACK);
 				mesh.position.set(...getViewPos(pos.x, 6, pos.z));
