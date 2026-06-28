@@ -1,0 +1,667 @@
+<html>
+	<head>
+		<style>
+			#telop  { position: absolute; top: 30%; left: 0%; z-index: 2; width: 100%; overflow: hidden; white-space: nowrap; text-align: center; display: none; }
+			#control { position: absolute; top: 10px; left: 10px; z-index: 1; }
+			#canvas  { position: absolute; top: 0px; left: 0px; z-index: 0; }
+			#telop #text { display: inline-block; padding: 2% 6%; font-size: 800%; color: yellow; background: black; white-space: pre; }
+			@keyframes marquee { 0% { transform: translateX(150%); } 100% { transform: translateX(-150%); } }
+			.run { animation: marquee 4s linear 1; }
+			button { font-size: 200%; }
+			span,select {font-size: 200%; margin: 5px; user-select: none;}
+			.no-select { user-select: none; }
+		</style>
+		<script type="importmap">
+			{
+			  "imports": {
+				"three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+				"three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+			  }
+			}
+		</script>
+	</head>
+	<body>
+		<div id="telop" class="no-select">
+			<div id="text"></div>
+		</div>
+		<div id="control">
+			<span>黒</span>
+			<select id="blackPlayer">
+				<option value="player">PLAYER</option>
+				<option value="cpu1">CPU1</option>
+			</select>
+			<span style="margin-left: 20px;">白</span>
+			<select id="whitePlayer">
+				<option value="player">PLAYER</option>
+				<option value="cpu1">CPU1</option>
+			</select>
+			<br><br>
+			<button id="start" style="display: block;">ゲームスタート</button>
+			<span id="turn"></span><br><span id="message"></span>
+		</div>
+		<div id="canvas" style="width: 100%; height: 100%;"></div>
+		<script type="module">
+			import * as THREE from 'three';
+			import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+			function getWidth()  { return canvas.getBoundingClientRect().width; }
+			function getHeight() { return canvas.getBoundingClientRect().height; }
+			function createShape(path) {
+				const elem = path.match(/[A-Za-z]|-?\d+(\.\d+)?/g);
+				if (elem.length == 0) { throw new Error(); }
+				const shape = new THREE.Shape();
+				let index = 0;
+				while (index < elem.length) {
+					let token = elem[index++];
+					switch (token) {
+					case 'M':
+						shape.moveTo(Number(elem[index]), Number(elem[index+1]));
+						index += 2;
+						break;
+					case 'C':
+						shape.bezierCurveTo(Number(elem[index]), Number(elem[index+1]), Number(elem[index+2]), Number(elem[index+3]), Number(elem[index+4]), Number(elem[index+5]));
+						index += 6;
+						break;
+					}
+				}
+				return shape;
+			}
+
+			const start			= document.getElementById('start');
+			const dispTurn		= document.getElementById('turn');
+			const dispMessage	= document.getElementById('message');
+			const telopBox		= document.getElementById('telop');
+			const telopText		= telopBox.querySelector('#text');
+			const blackPlayer	= document.getElementById('blackPlayer');
+			const whitePlayer	= document.getElementById('whitePlayer');
+
+			const GEO_PIECE 	= new THREE.LatheGeometry(createShape('M3,-6 C5,-6 8,-3 8,0 C8,3 5,6 3,6 C2,6 2,4 2,0 C2,-4 2,-6 3,-6').getPoints(64), 64);
+			const GEO_STICK 	= new THREE.CapsuleGeometry(0.006, 0.16, 4, 32);
+			const MAT_WHITE 	= new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 0.6, roughness: 0.1});
+			const MAT_BLACK		= new THREE.MeshStandardMaterial({color: 0x000000, metalness: 0.5, roughness: 0.1});
+			const MAT_BASE		= new THREE.MeshStandardMaterial({color: 0xb18a5b, metalness: 0.3, roughness: 0.3});
+			const MAT_STICK		= new THREE.MeshStandardMaterial({color: 0xc19a6b, metalness: 0.3, roughness: 0.3});
+			const MAT_STICK_SEL	= new THREE.MeshStandardMaterial({color: 0xa17a4b, metalness: 0.3, roughness: 0.3});
+			const GEO_LINE		= new THREE.BoxGeometry(0.06, 0.036, 0.06);
+			const MAT_LINEX		= new THREE.MeshStandardMaterial({color: 0xff0000, transparent: true, opacity: 0.3});
+			const MAT_LINE		= new THREE.MeshStandardMaterial({color: 0xffff00, transparent: true, opacity: 0.2});
+
+			const REN = 4;
+			const PIECE = {NONE: 'NONE', BLACK: 'BLACK', WHITE: 'WHITE'};
+			const LINE	= {NONE: 'NONE', X: 'X', Y: 'Y', Z: 'Z', XY1: 'XY1', XY2: 'XY2', XZ1: 'XZ1', XZ2: 'XZ2', YZ1: 'YZ1', YZ2: 'YZ2', XYZ1: 'XYZ1', XYZ2: 'XYZ2', XYZ3: 'XYZ3', XYZ4: 'XYZ4'};
+			const TIME = {DROP: 10};
+			const fields		= [];
+			let field			= [];
+			const winLines		= [];
+			let _turn			= null;
+			let game			= false;
+			let animation		= null;
+			let selectedStick	= null;
+			
+			function startGame() {
+				game = true;
+				start.style.display = 'none';
+				animation = null;
+				dispTurn.textContent = '';
+				dispMessage.textContent = '';
+				unselectStick();
+				clearLines();
+				clearPieces();
+				setTurn(PIECE.BLACK);
+				blackPlayer.disabled = true;
+				whitePlayer.disabled = true;
+			}
+			function endGame() {
+				game = false;
+				start.style.display = 'block';
+				animation = null;
+				blackPlayer.disabled = false;
+				whitePlayer.disabled = false;
+			}
+			function selectStick(stick) {
+				selectedStick = stick;
+				selectedStick.material = MAT_STICK_SEL;
+			}
+			function unselectStick() {
+				if (getSelectedStick() === null) { return; }
+				selectedStick.material = MAT_STICK;
+				selectedStick = null;
+			}
+			function getSelectedStick() {
+				return selectedStick;
+			}
+			function xyzToIndex(x, y, z) { return y*REN*REN + z*REN + x; }
+			function backupField() {
+				fields.push([...field]);
+			}
+			function restoreField() {
+				field = fields.pop();
+			}
+			function getField(x, y, z) { return field[xyzToIndex(x, y, z)]; }
+			function setField(x, y, z, value) { field[xyzToIndex(x, y, z)] = value; }
+
+			window.addEventListener('resize', () => {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize(window.innerWidth, window.innerHeight);
+			});
+			const raycaster = new THREE.Raycaster();
+			const mouse = new THREE.Vector2();
+			window.addEventListener('click', (event) => {
+				if (!game || inTelop() || animation != null) { return; }
+				mouse.x =  (event.clientX / getWidth())  * 2 - 1;
+				mouse.y = -(event.clientY / getHeight()) * 2 + 1;
+				raycaster.setFromCamera(mouse, camera);
+				const intersects = raycaster.intersectObjects(scene.children, true);
+				if (intersects.length <= 0) { return; }
+				const hit = intersects[0].object;
+				if (hit.name == null || hit.name.length == 0) { return; }
+				if (getSelectedStick() !== hit) { unselectStick(); selectStick(hit); return; }
+				unselectStick();
+				const index = hit.name.indexOf(',');
+				const x = Number(hit.name.substring(0, index));
+				const z = Number(hit.name.substring(index+1));
+				const y = getYIndex(x, z);
+				if (y < 0) { dispMessage.textContent = 'そこには置けません'; return; }
+				const piece = getTurn();
+				const mesh = createPiece((getTurn() == PIECE.WHITE)?MAT_WHITE:MAT_BLACK);
+				mesh.position.set(...getViewPos(x, y, z));
+				scene.add(mesh);
+				dispTurn.textContent = '';
+				animation = {mode: 'DROP', x: x, y: y, z: z, piece: piece, mesh: mesh, sx: x, sy: 6, sz: z, animateTime: (6-y)*10, counter: (6-y)*10};
+			});
+			function setTelop(str) {
+				console.log(str);
+				return new Promise(resolve => {
+					telopText.textContent = str;
+					telopText.classList.remove("run");
+					void telopText.offsetWidth;
+					telopBox.style.display = "block";
+					telopText.classList.add("run");
+					telopText.addEventListener("animationend", () => { telopBox.style.display = "none"; resolve(); }, { once: true });
+				});
+			}
+			function inTelop() { return telopBox.style.display == "block"; }
+			function isCpu1(turn) { return (turn === PIECE.BLACK && blackPlayer.value === 'cpu1') || (turn === PIECE.WHITE && whitePlayer.value === 'cpu1'); }
+			function getRandomPosition() {
+				let [x, y, z] = [0, -1, 0];
+				while (y < 0) {
+					[x, z] = [Math.floor(Math.random()*4), Math.floor(Math.random()*4)];
+					y = getYIndex(x, z);
+				}
+				return {x: x, y: y, z: z};
+			}
+			function getWinPosition(turn) {
+				for (let x = 0; x < REN; ++x) {
+					for (let z = 0; z < REN; ++z) {
+						let y = getYIndex(x, z);
+						if (y < 0) { continue; }
+						if (checkLine(x, y, z, [turn]).length !== 0) { return {x: x, y: y, z: z}; }
+					}
+				}
+				return null;
+			}
+			function turnCpu1(turn) {
+				const enemy = (turn === PIECE.BLACK)?PIECE.WHITE:PIECE.BLACK;
+				let pos = getWinPosition(turn);
+				if (pos === null) {
+					pos = getWinPosition(enemy);
+				}
+				while (pos === null) {
+					pos = getRandomPosition();
+					// ToDo: 相手が勝つ位置には置かない
+					if (pos.y != REN-1) {
+						backupField();
+						setField(pos.x, pos.y, pos.z, turn);
+						const pos2 = getWinPosition(enemy);
+						console.log(pos2);
+						if (pos2 !== null) { pos = null; }
+						restoreField();
+					}
+				}
+				const mesh = createPiece((turn == PIECE.WHITE)?MAT_WHITE:MAT_BLACK);
+				mesh.position.set(...getViewPos(pos.x, 6, pos.z));
+				scene.add(mesh);
+				animation = {mode: 'DROP', x: pos.x, y: pos.y, z: pos.z, piece: turn, mesh: mesh, sx: pos.x, sy: 6, sz: pos.z, animateTime: (6-pos.y)*TIME.DROP, counter: (6-pos.y)*TIME.DROP};
+			}
+			start.addEventListener('click', () => startGame());
+			function createPiece(mat) {
+				const piece = new THREE.Mesh(GEO_PIECE, mat);
+				piece.scale.set(0.003, 0.003, 0.003);
+				return piece;
+			}
+			function getViewPos(x, y, z) { return [(x-(REN-1)/2)*0.07, (y-(REN-1)/2)*0.0365+0.004, (z-(REN-1)/2)*0.07]; }
+			function setTurn(turn) {
+				_turn = turn;
+				dispTurn.textContent = ((turn === PIECE.BLACK)?'黒':'白')+'の番です';
+				dispMessage.textContent = '';
+				if (isCpu1(turn)) { turnCpu1(turn); }
+				else { animation = null; }
+			}
+			function getTurn() { return _turn; }
+			function changeTurn() { setTurn((getTurn() == PIECE.BLACK)?PIECE.WHITE:PIECE.BLACK); }
+			function getYIndex(x, z) {
+				let y = REN;
+				while (y > 0 && getField(x, y-1, z).type === PIECE.NONE) { --y; }
+				return (y == REN)?-1:y;
+			}
+			function checkLine(x, y, z, pieces) {
+				// X軸方向
+				const lines = [];
+				let result = true;
+				for (let i = 0; i < REN; ++i) {
+					if (i === x) { continue; }
+					if (!pieces.includes(getField(i, y, z).type)) { result = false; }
+				}
+				if (result == true) { lines.push(LINE.X); }
+
+				// Y軸方向
+				result = true;
+				for (let i = 0; i < REN; ++i) {
+					if (i === y) { continue; }
+					if (!pieces.includes(getField(x, i, z).type)) { result = false; }
+				}
+				if (result == true) { lines.push(LINE.Y); }
+
+				// Z軸方向
+				result = true;
+				for (let i = 0; i < REN; ++i) {
+					if (i === z) { continue; }
+					if (!pieces.includes(getField(x, y, i).type)) { result = false; }
+				}
+				if (result == true) { lines.push(LINE.Z); }
+
+				// XY軸方向1
+				if (x == y) {
+					result = true;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						if (!pieces.includes(getField(i, i, z).type)) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XY1); }
+				}
+
+				// XY軸方向2
+				if (x+y == REN-1) {
+					result = true;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						if (!pieces.includes(getField(i, REN-1-i, z).type)) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XY2); }
+				}
+
+				// XZ軸方向1
+				if (x == z) {
+					result = true;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						if (!pieces.includes(getField(i, y, i).type)) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XZ1); }
+				}
+
+				// XZ軸方向2
+				if (x+z == REN-1) {
+					result = true;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						if (!pieces.includes(getField(i, y, REN-1-i).type)) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XZ2); }
+				}
+
+				// YZ軸方向1
+				if (y == z) {
+					result = true;
+					for (let i = 0; i < REN; ++i) {
+						if (i === y) { continue; }
+						if (!pieces.includes(getField(x, i, i).type)) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.YZ1); }
+				}
+
+				// YZ軸方向2
+				if (y+z == REN-1) {
+					result = true;
+					for (let i = 0; i < REN; ++i) {
+						if (i === y) { continue; }
+						if (!pieces.includes(getField(x, i, REN-1-i).type)) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.YZ2); }
+				}
+
+				// XYZ軸方向1
+				if (x == y && z == x) {
+					result = true;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						if (!pieces.includes(getField(i, i, i).type)) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XYZ1); }
+				}
+
+				// XYZ軸方向2
+				if (x == y && x+z == REN-1) {
+					result = true;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						if (!pieces.includes(getField(i, i, REN-1-i).type)) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XYZ2); }
+				}
+
+				// XYZ軸方向3
+				if (x+y == REN-1 && z == x) {
+					result = true;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						if (!pieces.includes(getField(i, REN-1-i, i).type)) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XYZ3); }
+				}
+
+				// XYZ軸方向4
+				if (x+y == REN-1 && x+z == REN-1) {
+					result = true;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						if (!pieces.includes(getField(i, REN-1-i, REN-1-i).type)) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XYZ4); }
+				}
+				return lines;
+			}
+			function existNone() {
+				for (let x = 0; x < REN; ++x) {
+					for (let y = 0; y < REN; ++y) {
+						for (let z = 0; z < REN; ++z) {
+							if (getField(x, y, z).type === PIECE.NONE) { return true; }
+						}
+					}
+				}
+				return false;
+			}
+			function isDraw() {
+				for (let x = 0; x < REN; ++x) {
+					for (let y = 0; y < REN; ++y) {
+						for (let z = 0; z < REN; ++z) {
+							if (getField(x, y, z).type !== PIECE.NONE) { continue; }
+							if (checkLine(x, y, z, [PIECE.BLACK, PIECE.NONE]).length !== 0
+								|| checkLine(x, y, z, [PIECE.WHITE, PIECE.NONE]).length !== 0) { return false; }
+						}
+					}
+				}
+				return true;
+			}
+			function draw() {
+				setTelop('引き分けです');
+				dispTurn.textContent = '';
+				dispMessage.textContent = '';
+				animation = {mode: 'DRAW'};
+			}
+			function win(x, y, z, lines, piece) {
+				setTelop(((piece == PIECE.BLACK)?'黒':'白')+'の勝ちです');
+				dispTurn.textContent = '';
+				dispMessage.textContent = '';
+				animation = {mode: 'END', x: x, y: y, z: z, lines: lines};
+			}
+			function initField() {
+				for (let x = 0; x < REN; ++x) {
+					for (let y = 0; y < REN; ++y) {
+						for (let z = 0; z < REN; ++z) {
+							setField(x, y, z, {type: PIECE.NONE, mesh: null});
+						}
+					}
+				}
+				const g = new THREE.Group();
+				const base = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.01, 0.35), MAT_BASE);
+				base.position.set(0, -0.074, 0);
+				g.add(base);
+				for (let z = 0; z < REN; ++z) {
+					for (let x = 0; x < REN; ++x) {
+						const stick = new THREE.Mesh(GEO_STICK, MAT_STICK);
+						stick.name = `${x},${z}`;
+						const pos = getViewPos(x, 0, z);
+						stick.position.set(pos[0], 0.007, pos[2]);
+						g.add(stick);
+					}
+				}
+				scene.add(g);
+			}
+			function clearPieces() {
+				for (let x = 0; x < REN; ++x) {
+					for (let y = 0; y < REN; ++y) {
+						for (let z = 0; z < REN; ++z) {
+							const index = xyzToIndex(x, y, z);
+							if (getField(x, y, z).type !== PIECE.NONE) {
+								scene.remove(getField(x, y, z).mesh);
+								setField(x, y, z, {type: PIECE.NONE, mesh: null});
+							}
+						}
+					}
+				}
+			}
+			function clearLines() {
+				winLines.forEach((mesh) => scene.remove(mesh));
+				winLines.length = 0;
+			}
+			function drawLines(x, y, z, lines) {
+				const piece = getField(x, y, z); 
+				const mesh = new THREE.Mesh(GEO_LINE, MAT_LINEX);
+				mesh.position.set(...getViewPos(x, y, z));
+				scene.add(mesh);
+				winLines.push(mesh);
+				lines.forEach((line) => {
+					switch (line) {
+						case LINE.X: {
+							for (let i = 0; i < REN; ++i) {
+								if (i === x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, y, z));
+								scene.add(mesh);
+								winLines.push(mesh);
+							}
+						}
+						break;
+						
+						case LINE.Y: {
+							for (let i = 0; i < REN; ++i) {
+								if (i === y) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(x, i, z));
+								scene.add(mesh);
+								winLines.push(mesh);
+							}
+						}
+						break;
+						
+						case LINE.Z: {
+							for (let i = 0; i < REN; ++i) {
+								if (i === z) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(x, y, i));
+								scene.add(mesh);
+								winLines.push(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XY1: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, i, z));
+								scene.add(mesh);
+								winLines.push(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XY2: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, REN-1-i, z));
+								scene.add(mesh);
+								winLines.push(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XZ1: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, y, i));
+								scene.add(mesh);
+								winLines.push(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XZ2: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, y, REN-1-i));
+								scene.add(mesh);
+								winLines.push(mesh);
+							}
+						}
+						break;
+						
+						case LINE.YZ1: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == y) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(x, i, i));
+								scene.add(mesh);
+								winLines.push(mesh);
+							}
+						}
+						break;
+						
+						case LINE.YZ2: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == y) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(x, i, REN-1-i));
+								scene.add(mesh);
+								winLines.push(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XYZ1: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, i, i));
+								scene.add(mesh);
+								winLines.push(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XYZ2: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, i, REN-1-i));
+								scene.add(mesh);
+								winLines.push(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XYZ3: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, REN-1-i, i));
+								scene.add(mesh);
+								winLines.push(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XYZ4: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, REN-1-i, REN-1-i));
+								scene.add(mesh);
+								winLines.push(mesh);
+							}
+						}
+						break;
+					}
+				});
+			}
+			
+			const scene = new THREE.Scene();
+			scene.background = new THREE.Color(0x88cc88);
+			const directionLight = new THREE.DirectionalLight(0xffffff, 4);
+			directionLight.position.set(2, 1, 2);
+			scene.add(directionLight);
+			const ambientLight = new THREE.AmbientLight(0xffffff, 2);
+			scene.add(ambientLight);
+			const renderer = new THREE.WebGLRenderer({antialias: true});
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+			camera.position.set(-0.2, 0.2, 0.6);
+			const controls = new OrbitControls(camera, renderer.domElement);
+			controls.maxPolarAngle = Math.PI/2+Math.PI/10;
+			controls.target.set(0, 0, 0);
+			controls.update();
+			renderer.render(scene, camera);
+			document.querySelector('#canvas').appendChild(renderer.domElement);
+
+			function animate() {
+				requestAnimationFrame(animate);
+				if (game && !inTelop() && animation != null) {
+					switch (animation.mode) {
+						case 'DROP': {
+							--animation.counter;
+							if (animation.counter == 0) {
+								animation.mesh.position.set(...getViewPos(animation.x, animation.y, animation.z));
+								setField(animation.x, animation.y, animation.z, {type: animation.piece, mesh: animation.mesh});
+								const lines = checkLine(animation.x, animation.y, animation.z, [animation.piece]);
+								if (lines.length != 0) { win(animation.x, animation.y, animation.z, lines, animation.piece); return; }
+								if (!existNone()) { draw(); return; }
+//								if (isDraw()) { draw(); return; }
+								changeTurn();
+							}
+							else {
+								const delta = Math.sin(Math.PI/2*animation.counter/animation.animateTime);
+								const x = animation.x + (animation.sx - animation.x)*delta;
+								const y = animation.y + (animation.sy - animation.y)*delta;
+								const z = animation.z + (animation.sz - animation.z)*delta;
+								animation.mesh.position.set(...getViewPos(x, y, z));
+							}
+						}
+						break;
+						
+						case 'END': {
+							drawLines(animation.x, animation.y, animation.z, animation.lines);
+							endGame();
+						}
+						break;
+						
+						case 'DRAW': {
+							endGame();
+						}
+						break;
+					}
+				}
+				renderer.setSize(window.innerWidth, window.innerHeight);
+				renderer.render(scene, camera);
+			}
+			
+			initField();
+			animate();
+			
+		</script>
+	</body>
+</html>
