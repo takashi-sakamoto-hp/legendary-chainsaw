@@ -196,7 +196,7 @@ const img12 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6P
 			const DIRECTION = {NONE: 0, LEFT: 1, RIGHT: 2, UP: 3, DOWN: 4};
 			const MODE = {START: 0, RUNNING: 1};
 			const ANIMATION_MODE = {NONE: 0, START: 1, SHUFFLE: 2, MOVE: 3, END: 4, END2: 5, FAIL: 6, FAIL2: 7, GIVEUP: 8};
-			const SHUFFLE_MOVE = 7;
+			const SHUFFLE_MOVE = 15;
 			const ANIMATION_TIME = {NONE: 0, START: 100, SHUFFLE: SHUFFLE_MOVE, MOVE: 30, END: 100, FAIL: 10, GIVEUP: 10};
 
 			const piecesArray = [];
@@ -505,7 +505,7 @@ const img12 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6P
 					case ANIMATION_MODE.SHUFFLE: {
 						if (moveDelta(selectedIndex, direction, 1 - animateStep/ANIMATION_TIME.SHUFFLE) != 1) { return; }
 						if (checkComplete()) { setMoveCount(0); } else { setMoveCount(getMoveCount()+1); }
-						const limit = (isDebug())?1:(2*getLevel()-1);
+						const limit = (isDebug())?1:getLevel();
 						if (getMoveCount() < limit) {
 							[selectedIndex, direction] = getRandomIndexDirection(direction);
 							animateStep = ANIMATION_TIME.SHUFFLE;
