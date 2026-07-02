@@ -1,15 +1,18 @@
 <html>
 	<head>
 		<style>
-			#telop  { position: absolute; top: 30%; left: 0%; z-index: 2; width: 100%; overflow: hidden; white-space: nowrap; text-align: center; display: none; }
+			#telop  { position: absolute; top: 30%; left: 0%; z-index: 3; width: 100%; overflow: hidden; white-space: nowrap; text-align: center; display: none; user-select: none;}
 			#control { position: absolute; top: 10px; left: 10px; z-index: 1; }
 			#canvas  { position: absolute; top: 0px; left: 0px; z-index: 0; }
 			#telop #text { display: inline-block; padding: 2% 6%; font-size: 800%; color: yellow; background: black; white-space: pre; }
 			@keyframes marquee { 0% { transform: translateX(150%); } 100% { transform: translateX(-150%); } }
 			.run { animation: marquee 4s linear 1; }
+			.superrun { animation: marquee 1s linear 1; }
 			button { font-size: 200%; }
 			span,select {font-size: 200%; margin: 5px; user-select: none;}
-			.no-select { user-select: none; }
+			table {margin: 5px; user-select: none; border: 1px solid #000; border-collapse: collapse; }
+			tr,td,th {padding: 0px 5px 2px 5px; border: 1px solid #000;  }
+			td { text-align: right; }
 		</style>
 		<script type="importmap">
 			{
@@ -25,11 +28,24 @@
 			<div id="text"></div>
 		</div>
 		<div id="control">
-			<span>黒</span><select id="blackPlayer"><option value="player" selected>PLAYER</option><option value="cpu1">CPU1</option></select>
-			<span style="margin-left: 20px;">白</span><select id="whitePlayer"><option value="player">PLAYER</option><option value="cpu1" selected>CPU1</option></select>
+			<span>黒</span>
+			<select id="blackPlayer">
+				<option value="player" selected>PLAYER</option>
+				<option value="cpu1">CPU1</option>
+				<option value="cpu2">CPU2</option>
+				<option value="cpu3">CPU3</option>
+			</select>
+			<span style="margin-left: 20px;">白</span>
+			<select id="whitePlayer">
+				<option value="player">PLAYER</option>
+				<option value="cpu1" selected>CPU1</option>
+				<option value="cpu2">CPU2</option>
+				<option value="cpu3">CPU3</option>
+			</select>
 			<br><br>
 			<button id="start" style="display: block;">ゲームスタート</button>
 			<span id="turn"></span><br><span id="message"></span>
+			<br>
 		</div>
 		<div id="canvas" style="width: 100%; height: 100%;"></div>
 		<script type="module">
@@ -59,21 +75,23 @@
 				return shape;
 			}
 
-			const start			= document.getElementById('start');
-			const dispTurn		= document.getElementById('turn');
-			const dispMessage	= document.getElementById('message');
-			const telopBox		= document.getElementById('telop');
-			const telopText		= telopBox.querySelector('#text');
-			const blackPlayer	= document.getElementById('blackPlayer');
-			const whitePlayer	= document.getElementById('whitePlayer');
+			const TAG_START			= document.getElementById('start');
+			const TAG_TURN			= document.getElementById('turn');
+			const TAG_MESSAGE		= document.getElementById('message');
+			const TAG_TELOP			= document.getElementById('telop');
+			const TAG_TELOP_TEXT	= TAG_TELOP.querySelector('#text');
+			const TAG_BLACK_PLAYER	= document.getElementById('blackPlayer');
+			const TAG_WHITE_PLAYER	= document.getElementById('whitePlayer');
 
 			const GEO_PIECE 	= new THREE.LatheGeometry(createShape('M3,-6 C5,-6 8,-3 8,0 C8,3 5,6 3,6 C2,6 2,4 2,0 C2,-4 2,-6 3,-6').getPoints(64), 64);
-			const GEO_STICK 	= new THREE.CapsuleGeometry(0.006, 0.16, 4, 32);
 			const MAT_WHITE 	= new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 0.6, roughness: 0.1});
 			const MAT_BLACK		= new THREE.MeshStandardMaterial({color: 0x000000, metalness: 0.5, roughness: 0.1});
+
 			const MAT_BASE		= new THREE.MeshStandardMaterial({color: 0xb18a5b, metalness: 0.3, roughness: 0.3});
+			const GEO_STICK 	= new THREE.CapsuleGeometry(0.006, 0.16, 4, 32);
 			const MAT_STICK		= new THREE.MeshStandardMaterial({color: 0xc19a6b, metalness: 0.3, roughness: 0.3});
 			const MAT_STICK_SEL	= new THREE.MeshStandardMaterial({color: 0xa17a4b, metalness: 0.3, roughness: 0.3});
+
 			const GEO_LINE		= new THREE.BoxGeometry(0.06, 0.036, 0.06);
 			const MAT_LINEX		= new THREE.MeshStandardMaterial({color: 0xff0000, transparent: true, opacity: 0.3});
 			const MAT_LINE		= new THREE.MeshStandardMaterial({color: 0xffff00, transparent: true, opacity: 0.2});
@@ -81,52 +99,52 @@
 			const REN = 4;
 			const PIECE = {NONE: 'NONE', BLACK: 'BLACK', WHITE: 'WHITE'};
 			const LINE	= {NONE: 'NONE', X: 'X', Y: 'Y', Z: 'Z', XY1: 'XY1', XY2: 'XY2', XZ1: 'XZ1', XZ2: 'XZ2', YZ1: 'YZ1', YZ2: 'YZ2', XYZ1: 'XYZ1', XYZ2: 'XYZ2', XYZ3: 'XYZ3', XYZ4: 'XYZ4'};
-			const TIME = {DROP: 10};
-			const CPU_RETRY_MAX = 10;
+			const TIME = {DROP: 10, TELOP: 'run'};
 			
-			const fields		= [];
-			let field			= [];
-			const winLines		= [];
+			const _meshes		= [];
+			const _field		= [];
 			let _turn			= null;
-			let game			= false;
-			let animation		= null;
-			let selectedStick	= null;
+			let _game			= false;
+			let _animation		= null;
+			let _selectedStick	= null;
 			
 			function startGame() {
-				game = true;
-				start.style.display = 'none';
-				animation = null;
-				dispTurn.textContent = '';
-				dispMessage.textContent = '';
+				_game = true;
+				TAG_START.style.display = 'none';
+				_animation = null;
+				TAG_TURN.textContent = '';
+				TAG_MESSAGE.textContent = '';
 				unselectStick();
-				clearLines();
 				clearPieces();
 				setTurn(PIECE.BLACK);
-				blackPlayer.disabled = true;
-				whitePlayer.disabled = true;
+				TAG_BLACK_PLAYER.disabled = true;
+				TAG_WHITE_PLAYER.disabled = true;
 			}
 			function endGame() {
-				game = false;
-				start.style.display = 'block';
-				animation = null;
-				blackPlayer.disabled = false;
-				whitePlayer.disabled = false;
+				_game = false;
+				TAG_START.style.display = 'block';
+				_animation = null;
+				TAG_BLACK_PLAYER.disabled = false;
+				TAG_WHITE_PLAYER.disabled = false;
 			}
 			function selectStick(stick) {
-				selectedStick = stick;
-				selectedStick.material = MAT_STICK_SEL;
+				_selectedStick = stick;
+				_selectedStick.material = MAT_STICK_SEL;
 			}
 			function unselectStick() {
 				if (getSelectedStick() === null) { return; }
-				selectedStick.material = MAT_STICK;
-				selectedStick = null;
+				_selectedStick.material = MAT_STICK;
+				_selectedStick = null;
 			}
-			function getSelectedStick() { return selectedStick; }
-			function xyzToIndex(x, y, z) { return y*REN*REN + z*REN + x; }
-			function backupField() { fields.push([...field]); }
-			function restoreField() { field = fields.pop(); }
-			function getField(x, y, z) { return field[xyzToIndex(x, y, z)]; }
-			function setField(x, y, z, value) { field[xyzToIndex(x, y, z)] = value; }
+			function getSelectedStick() { return _selectedStick; }
+			function getField(x, y, z) {
+				if (x < 0 || x >= REN || y < 0 || y >=REN || z < 0 || z >= REN) { throw new Error('Internal error'); }
+				return _field[y*REN*REN + z*REN + x];
+			}
+			function setField(x, y, z, value) {
+				if (x < 0 || x >= REN || y < 0 || y >=REN || z < 0 || z >= REN || ![PIECE.BLACK, PIECE.WHITE, PIECE.NONE].includes(value)) { throw new Error('Internal error'); }
+				_field[y*REN*REN + z*REN + x] = value;
+			}
 
 			window.addEventListener('resize', () => {
 				camera.aspect = window.innerWidth / window.innerHeight;
@@ -135,8 +153,16 @@
 			});
 			const raycaster = new THREE.Raycaster();
 			const mouse = new THREE.Vector2();
+			function addMesh(mesh) {
+				scene.add(mesh);
+				_meshes.push(mesh);
+			}
+			function removeMeshes() {
+				_meshes.forEach((mesh) => scene.remove(mesh));
+				_meshes.length = 0;
+			}
 			window.addEventListener('click', (event) => {
-				if (!game || inTelop() || animation != null) { return; }
+				if (!_game || inTelop() || _animation != null) { return; }
 				mouse.x =  (event.clientX / getWidth())  * 2 - 1;
 				mouse.y = -(event.clientY / getHeight()) * 2 + 1;
 				raycaster.setFromCamera(mouse, camera);
@@ -149,68 +175,126 @@
 				const index = hit.name.indexOf(',');
 				const x = Number(hit.name.substring(0, index));
 				const z = Number(hit.name.substring(index+1));
-				const y = getYIndex(x, z);
-				if (y < 0) { dispMessage.textContent = 'そこには置けません'; return; }
-				const piece = getTurn();
-				const mesh = createPiece((getTurn() == PIECE.WHITE)?MAT_WHITE:MAT_BLACK);
-				mesh.position.set(...getViewPos(x, y, z));
-				scene.add(mesh);
-				dispTurn.textContent = '';
-				animation = {mode: 'DROP', x: x, y: y, z: z, piece: piece, mesh: mesh, sx: x, sy: 6, sz: z, animateTime: (6-y)*10, counter: (6-y)*10};
+				if (getYIndex(x, z) < 0) { TAG_MESSAGE.textContent = 'そこには置けません'; return; }
+				drop(getTurn(), x, z);
 			});
+			function drop(turn, x, z) {
+				console.log(turn, x, z);
+				let y = getYIndex(x, z);
+				const mesh = createPiece((turn == PIECE.WHITE)?MAT_WHITE:MAT_BLACK);
+				mesh.position.set(...getViewPos(x, 6, z));
+				addMesh(mesh);
+				_animation = {mode: 'DROP', x: x, y: y, z: z, piece: turn, mesh: mesh, sx: x, sy: 6, sz: z, animateTime: (6-y)*TIME.DROP, counter: (6-y)*TIME.DROP};
+				TAG_TURN.textContent = '';
+			}
 			function setTelop(str) {
 				console.log(str);
 				return new Promise(resolve => {
-					telopText.textContent = str;
-					telopText.classList.remove("run");
-					void telopText.offsetWidth;
-					telopBox.style.display = "block";
-					telopText.classList.add("run");
-					telopText.addEventListener("animationend", () => { telopBox.style.display = "none"; resolve(); }, { once: true });
+					TAG_TELOP_TEXT.textContent = str;
+					TAG_TELOP_TEXT.classList.remove(TIME.TELOP);
+					void TAG_TELOP_TEXT.offsetWidth;
+					TAG_TELOP.style.display = "block";
+					TAG_TELOP_TEXT.classList.add(TIME.TELOP);
+					TAG_TELOP_TEXT.addEventListener("animationend", () => { TAG_TELOP.style.display = "none"; resolve(); }, { once: true });
 				});
 			}
-			function inTelop() { return telopBox.style.display == "block"; }
-			function isCpu1(turn) { return (turn === PIECE.BLACK && blackPlayer.value === 'cpu1') || (turn === PIECE.WHITE && whitePlayer.value === 'cpu1'); }
-			function getRandomPosition() {
-				let [x, y, z] = [0, -1, 0];
-				while (y < 0) {
-					[x, z] = [Math.floor(Math.random()*4), Math.floor(Math.random()*4)];
-					y = getYIndex(x, z);
-				}
-				return {x: x, y: y, z: z};
-			}
-			function getWinPosition(turn) {
+			function inTelop() { return TAG_TELOP.style.display == "block"; }
+			function isCpu1(turn) { return (turn === PIECE.BLACK && TAG_BLACK_PLAYER.value === 'cpu1') || (turn === PIECE.WHITE && TAG_WHITE_PLAYER.value === 'cpu1'); }
+			function isCpu2(turn) { return (turn === PIECE.BLACK && TAG_BLACK_PLAYER.value === 'cpu2') || (turn === PIECE.WHITE && TAG_WHITE_PLAYER.value === 'cpu2'); }
+			function isCpu3(turn) { return (turn === PIECE.BLACK && TAG_BLACK_PLAYER.value === 'cpu3') || (turn === PIECE.WHITE && TAG_WHITE_PLAYER.value === 'cpu3'); }
+			function getWinPositionList(turn) {
+				const list = [];
 				for (let x = 0; x < REN; ++x) {
 					for (let z = 0; z < REN; ++z) {
 						let y = getYIndex(x, z);
 						if (y < 0) { continue; }
-						if (checkLine(x, y, z, [turn]).length !== 0) { return {x: x, y: y, z: z}; }
+						if (checkLine(x, y, z, [turn]).length !== 0) { list.push([x,z]); }
 					}
 				}
-				return null;
+				return list;
 			}
-			function turnCpu1(turn) {
+			function pickOne(list) {
+//				return list[0];
+				return list[Math.floor(Math.random()*list.length)];
+			}
+			const GAME = {WIN: 'WIN', EVEN: 'EVEN', LOOSE: 'LOOSE'};
+			function guess(turn, depth) {
+				if (depth == 0) { return GAME.EVEN; }
+				const list = getWinPositionList(turn);
+				if (list.length > 0) { return GAME.WIN; }
+
 				const enemy = (turn === PIECE.BLACK)?PIECE.WHITE:PIECE.BLACK;
-				let pos = getWinPosition(turn);
-				if (pos === null) {
-					pos = getWinPosition(enemy);
+				let winCount = 0;
+				let looseCount = 0;
+				let skipCount = 0;
+				for (let x = 0; x < REN; ++x) {
+					for (let z = 0; z < REN; ++z) {
+						const y = getYIndex(x, z);
+						if (y < 0) { ++skipCount; continue; }
+						setField(x, y, z, turn);
+						const result = guess(enemy, depth-1);
+						if (result === GAME.WIN) { ++winCount; }
+						if (result === GAME.LOOSE) { ++looseCount; }
+						setField(x, y, z, PIECE.NONE);
+					}
 				}
-				let retryCount = 0;
-				while (pos === null && retryCount < CPU_RETRY_MAX) {
-					pos = getRandomPosition();
-					// ToDo: 相手が勝つ位置には置かない
-					if (pos.y == REN-1) { break; }
-					backupField();
-					setField(pos.x, pos.y, pos.z, turn);
-					if (getWinPosition(enemy) !== null) { pos = null; ++retryCount; }
-					restoreField();
-				}
-				const mesh = createPiece((turn == PIECE.WHITE)?MAT_WHITE:MAT_BLACK);
-				mesh.position.set(...getViewPos(pos.x, 6, pos.z));
-				scene.add(mesh);
-				animation = {mode: 'DROP', x: pos.x, y: pos.y, z: pos.z, piece: turn, mesh: mesh, sx: pos.x, sy: 6, sz: pos.z, animateTime: (6-pos.y)*TIME.DROP, counter: (6-pos.y)*TIME.DROP};
+				if (skipCount === REN*REN) { return GAME.EVEN; }
+				else if (looseCount + skipCount === REN*REN) { return GAME.WIN; }
+				else if (winCount + skipCount === REN*REN) { return GAME.LOOSE; }
+				return GAME.EVEN;
 			}
-			start.addEventListener('click', () => startGame());
+			function turnCpu(turn, level) {
+				const depth = (level === 1)?1:2;
+				const enemy = (turn === PIECE.BLACK)?PIECE.WHITE:PIECE.BLACK;
+				// 1 move
+				let list = getWinPositionList(turn);
+				if (list.length !== 0) { return pickOne(list); }
+
+				// 2 move
+				const winList = [];
+				const evenList = [];
+				const looseList = [];
+				for (let x = 0; x < REN; ++x) {
+					for (let z = 0; z < REN; ++z) {
+						const y = getYIndex(x, z);
+						if (y < 0) { continue; }
+						setField(x, y, z, turn);
+						switch (guess(enemy, depth)) {
+							case GAME.WIN:		looseList.push([x,z]);	break;
+							case GAME.LOOSE:	winList.push([x,z]);	break;
+							case GAME.EVEN:		evenList.push([x,z]);	break;
+						}
+						setField(x, y, z, PIECE.NONE);
+					}
+				}
+				if (winList.length !== 0) {
+					console.log(turn, '勝ったな');
+					return pickOne(winList);
+				}
+				else if (evenList.length === 1) {
+					console.log(turn, 'おっと');
+					return pickOne(evenList);
+				}
+				else if (evenList.length === 0) {
+					console.log(turn, 'やばい');
+					list = getWinPositionList(enemy);
+					return pickOne((list.length !== 0)?list:looseList);
+				}
+				
+				if (level === 3) {
+					const valueList = [];
+					let maxValue = -1;
+					evenList.forEach(([x,z]) => {
+						const enemyValue = checkLine(x, getYIndex(x, z), z, enemy, 1).length;
+						const value = enemyValue;
+						if (value > maxValue) { maxValue = value; valueList.length = 0; }
+						if (value === maxValue) { valueList.push([x,z]); }
+					});
+					if (valueList.length > 0) { return pickOne(valueList); }
+				}
+				return pickOne(evenList);
+			}
+			TAG_START.addEventListener('click', () => startGame());
 			function createPiece(mat) {
 				const piece = new THREE.Mesh(GEO_PIECE, mat);
 				piece.scale.set(0.003, 0.003, 0.003);
@@ -219,50 +303,75 @@
 			function getViewPos(x, y, z) { return [(x-(REN-1)/2)*0.07, (y-(REN-1)/2)*0.0365+0.004, (z-(REN-1)/2)*0.07]; }
 			function setTurn(turn) {
 				_turn = turn;
-				dispTurn.textContent = ((turn === PIECE.BLACK)?'黒':'白')+'の番です';
-				dispMessage.textContent = '';
-				if (isCpu1(turn)) { turnCpu1(turn); }
-				else { animation = null; }
+				TAG_TURN.textContent = ((turn === PIECE.BLACK)?'黒':'白')+'の番です';
+				TAG_MESSAGE.textContent = '';
+				if		(isCpu1(turn)) { drop(turn, ...turnCpu(turn, 1)); }
+				else if (isCpu2(turn)) { drop(turn, ...turnCpu(turn, 2)); }
+				else if (isCpu3(turn)) { drop(turn, ...turnCpu(turn, 3)); }
 			}
 			function getTurn() { return _turn; }
 			function changeTurn() { setTurn((getTurn() == PIECE.BLACK)?PIECE.WHITE:PIECE.BLACK); }
 			function getYIndex(x, z) {
 				let y = REN;
-				while (y > 0 && getField(x, y-1, z).type === PIECE.NONE) { --y; }
-				return (y == REN)?-1:y;
+				while (y > 0 && getField(x, y-1, z) === PIECE.NONE) { --y; }
+				return (y === REN)?-1:y;
 			}
-			function checkLine(x, y, z, pieces) {
-				// X軸方向
+			function checkLine(x, y, z, piece, allowNone = 0) {
 				const lines = [];
+				// X軸方向
 				let result = true;
+				let noneCount = 0;
 				for (let i = 0; i < REN; ++i) {
 					if (i === x) { continue; }
-					if (!pieces.includes(getField(i, y, z).type)) { result = false; }
+					let fieldPiece = getField(i, y, z);
+					if (fieldPiece === PIECE.NONE) {
+						++noneCount;
+						if (noneCount <= allowNone) { fieldPiece = piece; }
+					}
+					if (fieldPiece !== piece) { result = false; }
 				}
 				if (result == true) { lines.push(LINE.X); }
 
 				// Y軸方向
 				result = true;
+				noneCount = 0;
 				for (let i = 0; i < REN; ++i) {
 					if (i === y) { continue; }
-					if (!pieces.includes(getField(x, i, z).type)) { result = false; }
+					let fieldPiece = getField(x, i, z);
+					if (fieldPiece === PIECE.NONE) {
+						++noneCount;
+						if (noneCount <= allowNone) { fieldPiece = piece; }
+					}
+					if (fieldPiece !== piece) { result = false; }
 				}
 				if (result == true) { lines.push(LINE.Y); }
 
 				// Z軸方向
 				result = true;
+				noneCount = 0;
 				for (let i = 0; i < REN; ++i) {
 					if (i === z) { continue; }
-					if (!pieces.includes(getField(x, y, i).type)) { result = false; }
+					let fieldPiece = getField(x, y, i);
+					if (fieldPiece === PIECE.NONE) {
+						++noneCount;
+						if (noneCount <= allowNone) { fieldPiece = piece; }
+					}
+					if (fieldPiece !== piece) { result = false; }
 				}
 				if (result == true) { lines.push(LINE.Z); }
 
 				// XY軸方向1
 				if (x == y) {
 					result = true;
+					noneCount = 0;
 					for (let i = 0; i < REN; ++i) {
 						if (i === x) { continue; }
-						if (!pieces.includes(getField(i, i, z).type)) { result = false; }
+						let fieldPiece = getField(i, i, z);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
 					}
 					if (result == true) { lines.push(LINE.XY1); }
 				}
@@ -270,9 +379,15 @@
 				// XY軸方向2
 				if (x+y == REN-1) {
 					result = true;
+					noneCount = 0;
 					for (let i = 0; i < REN; ++i) {
 						if (i === x) { continue; }
-						if (!pieces.includes(getField(i, REN-1-i, z).type)) { result = false; }
+						let fieldPiece = getField(i, REN-1-i, z);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
 					}
 					if (result == true) { lines.push(LINE.XY2); }
 				}
@@ -280,9 +395,15 @@
 				// XZ軸方向1
 				if (x == z) {
 					result = true;
+					noneCount = 0;
 					for (let i = 0; i < REN; ++i) {
 						if (i === x) { continue; }
-						if (!pieces.includes(getField(i, y, i).type)) { result = false; }
+						let fieldPiece = getField(i, y, i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
 					}
 					if (result == true) { lines.push(LINE.XZ1); }
 				}
@@ -290,9 +411,15 @@
 				// XZ軸方向2
 				if (x+z == REN-1) {
 					result = true;
+					noneCount = 0;
 					for (let i = 0; i < REN; ++i) {
 						if (i === x) { continue; }
-						if (!pieces.includes(getField(i, y, REN-1-i).type)) { result = false; }
+						let fieldPiece = getField(i, y, REN-1-i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
 					}
 					if (result == true) { lines.push(LINE.XZ2); }
 				}
@@ -300,9 +427,15 @@
 				// YZ軸方向1
 				if (y == z) {
 					result = true;
+					noneCount = 0;
 					for (let i = 0; i < REN; ++i) {
 						if (i === y) { continue; }
-						if (!pieces.includes(getField(x, i, i).type)) { result = false; }
+						let fieldPiece = getField(x, i, i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
 					}
 					if (result == true) { lines.push(LINE.YZ1); }
 				}
@@ -310,9 +443,15 @@
 				// YZ軸方向2
 				if (y+z == REN-1) {
 					result = true;
+					noneCount = 0;
 					for (let i = 0; i < REN; ++i) {
 						if (i === y) { continue; }
-						if (!pieces.includes(getField(x, i, REN-1-i).type)) { result = false; }
+						let fieldPiece = getField(x, i, REN-1-i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
 					}
 					if (result == true) { lines.push(LINE.YZ2); }
 				}
@@ -320,9 +459,15 @@
 				// XYZ軸方向1
 				if (x == y && z == x) {
 					result = true;
+					noneCount = 0;
 					for (let i = 0; i < REN; ++i) {
 						if (i === x) { continue; }
-						if (!pieces.includes(getField(i, i, i).type)) { result = false; }
+						let fieldPiece = getField(i, i, i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
 					}
 					if (result == true) { lines.push(LINE.XYZ1); }
 				}
@@ -330,9 +475,15 @@
 				// XYZ軸方向2
 				if (x == y && x+z == REN-1) {
 					result = true;
+					noneCount = 0;
 					for (let i = 0; i < REN; ++i) {
 						if (i === x) { continue; }
-						if (!pieces.includes(getField(i, i, REN-1-i).type)) { result = false; }
+						let fieldPiece = getField(i, i, REN-1-i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
 					}
 					if (result == true) { lines.push(LINE.XYZ2); }
 				}
@@ -340,9 +491,15 @@
 				// XYZ軸方向3
 				if (x+y == REN-1 && z == x) {
 					result = true;
+					noneCount = 0;
 					for (let i = 0; i < REN; ++i) {
 						if (i === x) { continue; }
-						if (!pieces.includes(getField(i, REN-1-i, i).type)) { result = false; }
+						let fieldPiece = getField(i, REN-1-i, i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
 					}
 					if (result == true) { lines.push(LINE.XYZ3); }
 				}
@@ -350,9 +507,15 @@
 				// XYZ軸方向4
 				if (x+y == REN-1 && x+z == REN-1) {
 					result = true;
+					noneCount = 0;
 					for (let i = 0; i < REN; ++i) {
 						if (i === x) { continue; }
-						if (!pieces.includes(getField(i, REN-1-i, REN-1-i).type)) { result = false; }
+						let fieldPiece = getField(i, REN-1-i, REN-1-i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
 					}
 					if (result == true) { lines.push(LINE.XYZ4); }
 				}
@@ -362,42 +525,28 @@
 				for (let x = 0; x < REN; ++x) {
 					for (let y = 0; y < REN; ++y) {
 						for (let z = 0; z < REN; ++z) {
-							if (getField(x, y, z).type === PIECE.NONE) { return true; }
+							if (getField(x, y, z) === PIECE.NONE) { return true; }
 						}
 					}
 				}
 				return false;
 			}
-			function isDraw() {
-				for (let x = 0; x < REN; ++x) {
-					for (let y = 0; y < REN; ++y) {
-						for (let z = 0; z < REN; ++z) {
-							if (getField(x, y, z).type !== PIECE.NONE) { continue; }
-							if (checkLine(x, y, z, [PIECE.BLACK, PIECE.NONE]).length !== 0
-								|| checkLine(x, y, z, [PIECE.WHITE, PIECE.NONE]).length !== 0) { return false; }
-						}
-					}
-				}
-				return true;
-			}
 			function draw() {
 				setTelop('引き分けです');
-				dispTurn.textContent = '';
-				dispMessage.textContent = '';
-				animation = {mode: 'DRAW'};
+				TAG_TURN.textContent = '';
+				TAG_MESSAGE.textContent = '';
+				_animation = {mode: 'DRAW'};
 			}
 			function win(x, y, z, lines, piece) {
 				setTelop(((piece == PIECE.BLACK)?'黒':'白')+'の勝ちです');
-				dispTurn.textContent = '';
-				dispMessage.textContent = '';
-				animation = {mode: 'END', x: x, y: y, z: z, lines: lines};
+				TAG_TURN.textContent = '';
+				TAG_MESSAGE.textContent = '';
+				_animation = {mode: 'END', x: x, y: y, z: z, lines: lines};
 			}
 			function initField() {
 				for (let x = 0; x < REN; ++x) {
 					for (let y = 0; y < REN; ++y) {
-						for (let z = 0; z < REN; ++z) {
-							setField(x, y, z, {type: PIECE.NONE, mesh: null});
-						}
+						for (let z = 0; z < REN; ++z) { setField(x, y, z, PIECE.NONE); }
 					}
 				}
 				const g = new THREE.Group();
@@ -418,26 +567,16 @@
 			function clearPieces() {
 				for (let x = 0; x < REN; ++x) {
 					for (let y = 0; y < REN; ++y) {
-						for (let z = 0; z < REN; ++z) {
-							const index = xyzToIndex(x, y, z);
-							if (getField(x, y, z).type !== PIECE.NONE) {
-								scene.remove(getField(x, y, z).mesh);
-								setField(x, y, z, {type: PIECE.NONE, mesh: null});
-							}
-						}
+						for (let z = 0; z < REN; ++z) { setField(x, y, z, PIECE.NONE); }
 					}
 				}
-			}
-			function clearLines() {
-				winLines.forEach((mesh) => scene.remove(mesh));
-				winLines.length = 0;
+				removeMeshes();
 			}
 			function drawLines(x, y, z, lines) {
 				const piece = getField(x, y, z); 
 				const mesh = new THREE.Mesh(GEO_LINE, MAT_LINEX);
 				mesh.position.set(...getViewPos(x, y, z));
-				scene.add(mesh);
-				winLines.push(mesh);
+				addMesh(mesh);
 				lines.forEach((line) => {
 					switch (line) {
 						case LINE.X: {
@@ -445,8 +584,7 @@
 								if (i === x) { continue; }
 								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
 								mesh.position.set(...getViewPos(i, y, z));
-								scene.add(mesh);
-								winLines.push(mesh);
+								addMesh(mesh);
 							}
 						}
 						break;
@@ -456,8 +594,7 @@
 								if (i === y) { continue; }
 								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
 								mesh.position.set(...getViewPos(x, i, z));
-								scene.add(mesh);
-								winLines.push(mesh);
+								addMesh(mesh);
 							}
 						}
 						break;
@@ -467,8 +604,7 @@
 								if (i === z) { continue; }
 								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
 								mesh.position.set(...getViewPos(x, y, i));
-								scene.add(mesh);
-								winLines.push(mesh);
+								addMesh(mesh);
 							}
 						}
 						break;
@@ -478,8 +614,7 @@
 								if (i == x) { continue; }
 								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
 								mesh.position.set(...getViewPos(i, i, z));
-								scene.add(mesh);
-								winLines.push(mesh);
+								addMesh(mesh);
 							}
 						}
 						break;
@@ -489,8 +624,7 @@
 								if (i == x) { continue; }
 								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
 								mesh.position.set(...getViewPos(i, REN-1-i, z));
-								scene.add(mesh);
-								winLines.push(mesh);
+								addMesh(mesh);
 							}
 						}
 						break;
@@ -500,8 +634,7 @@
 								if (i == x) { continue; }
 								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
 								mesh.position.set(...getViewPos(i, y, i));
-								scene.add(mesh);
-								winLines.push(mesh);
+								addMesh(mesh);
 							}
 						}
 						break;
@@ -511,8 +644,7 @@
 								if (i == x) { continue; }
 								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
 								mesh.position.set(...getViewPos(i, y, REN-1-i));
-								scene.add(mesh);
-								winLines.push(mesh);
+								addMesh(mesh);
 							}
 						}
 						break;
@@ -522,8 +654,7 @@
 								if (i == y) { continue; }
 								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
 								mesh.position.set(...getViewPos(x, i, i));
-								scene.add(mesh);
-								winLines.push(mesh);
+								addMesh(mesh);
 							}
 						}
 						break;
@@ -533,8 +664,7 @@
 								if (i == y) { continue; }
 								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
 								mesh.position.set(...getViewPos(x, i, REN-1-i));
-								scene.add(mesh);
-								winLines.push(mesh);
+								addMesh(mesh);
 							}
 						}
 						break;
@@ -544,8 +674,7 @@
 								if (i == x) { continue; }
 								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
 								mesh.position.set(...getViewPos(i, i, i));
-								scene.add(mesh);
-								winLines.push(mesh);
+								addMesh(mesh);
 							}
 						}
 						break;
@@ -555,8 +684,7 @@
 								if (i == x) { continue; }
 								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
 								mesh.position.set(...getViewPos(i, i, REN-1-i));
-								scene.add(mesh);
-								winLines.push(mesh);
+								addMesh(mesh);
 							}
 						}
 						break;
@@ -566,8 +694,7 @@
 								if (i == x) { continue; }
 								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
 								mesh.position.set(...getViewPos(i, REN-1-i, i));
-								scene.add(mesh);
-								winLines.push(mesh);
+								addMesh(mesh);
 							}
 						}
 						break;
@@ -577,8 +704,7 @@
 								if (i == x) { continue; }
 								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
 								mesh.position.set(...getViewPos(i, REN-1-i, REN-1-i));
-								scene.add(mesh);
-								winLines.push(mesh);
+								addMesh(mesh);
 							}
 						}
 						break;
@@ -606,37 +732,39 @@
 
 			function animate() {
 				requestAnimationFrame(animate);
-				if (game && !inTelop() && animation != null) {
-					switch (animation.mode) {
+				if (_game && !inTelop() && _animation != null) {
+					switch (_animation.mode) {
 						case 'DROP': {
-							--animation.counter;
-							if (animation.counter == 0) {
-								animation.mesh.position.set(...getViewPos(animation.x, animation.y, animation.z));
-								setField(animation.x, animation.y, animation.z, {type: animation.piece, mesh: animation.mesh});
-								const lines = checkLine(animation.x, animation.y, animation.z, [animation.piece]);
-								if (lines.length != 0) { win(animation.x, animation.y, animation.z, lines, animation.piece); return; }
+							--_animation.counter;
+							if (_animation.counter == 0) {
+								_animation.mesh.position.set(...getViewPos(_animation.x, _animation.y, _animation.z));
+								setField(_animation.x, _animation.y, _animation.z, _animation.piece);
+								const lines = checkLine(_animation.x, _animation.y, _animation.z, _animation.piece);
+								if (lines.length != 0) { win(_animation.x, _animation.y, _animation.z, lines, _animation.piece); return; }
 								if (!existNone()) { draw(); return; }
-//								if (isDraw()) { draw(); return; }
-								changeTurn();
+								_animation = null;
+								setTimeout(changeTurn, 1);
 							}
 							else {
-								const delta = Math.sin(Math.PI/2*animation.counter/animation.animateTime);
-								const x = animation.x + (animation.sx - animation.x)*delta;
-								const y = animation.y + (animation.sy - animation.y)*delta;
-								const z = animation.z + (animation.sz - animation.z)*delta;
-								animation.mesh.position.set(...getViewPos(x, y, z));
+								const delta = Math.sin(Math.PI/2*_animation.counter/_animation.animateTime);
+								const x = _animation.x + (_animation.sx - _animation.x)*delta;
+								const y = _animation.y + (_animation.sy - _animation.y)*delta;
+								const z = _animation.z + (_animation.sz - _animation.z)*delta;
+								_animation.mesh.position.set(...getViewPos(x, y, z));
 							}
 						}
 						break;
 						
 						case 'END': {
-							drawLines(animation.x, animation.y, animation.z, animation.lines);
-							endGame();
+							drawLines(_animation.x, _animation.y, _animation.z, _animation.lines);
+							_animation = null;
+							setTimeout(endGame, 1);
 						}
 						break;
 						
 						case 'DRAW': {
-							endGame();
+							_animation = null;
+							setTimeout(endGame, 1);
 						}
 						break;
 					}
@@ -645,6 +773,15 @@
 				renderer.render(scene, camera);
 			}
 			
+			function setParameter() {
+				const params = new URLSearchParams(window.location.search);
+				let tmp = Number(params.get('speed'));
+				if (Number.isNaN(tmp) || tmp < 1) { tmp = 10; }
+				TIME.DROP = tmp;
+				TIME.TELOP = (TIME.DROP === 1)?'superrun':'run';
+			}
+			
+			setParameter();
 			initField();
 			animate();
 			
