@@ -208,7 +208,7 @@
 					for (let z = 0; z < REN; ++z) {
 						let y = getYIndex(x, z);
 						if (y < 0) { continue; }
-						if (checkLine(x, y, z, [turn]).length !== 0) { list.push([x,z]); }
+						if (checkLine(x, y, z, turn).length !== 0) { list.push([x,z]); }
 					}
 				}
 				return list;
