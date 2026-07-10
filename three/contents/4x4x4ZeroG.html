@@ -1,0 +1,778 @@
+<html>
+	<head>
+		<style>
+			#telop  { position: absolute; top: 30%; left: 0%; z-index: 3; width: 100%; overflow: hidden; white-space: nowrap; text-align: center; display: none; user-select: none;}
+			#control { position: absolute; top: 10px; left: 10px; z-index: 1; }
+			#canvas  { position: absolute; top: 0px; left: 0px; z-index: 0; }
+			#telop #text { display: inline-block; padding: 2% 6%; font-size: 800%; color: yellow; background: black; white-space: pre; }
+			@keyframes marquee { 0% { transform: translateX(150%); } 100% { transform: translateX(-150%); } }
+			.run { animation: marquee 4s linear 1; }
+			.superrun { animation: marquee 1s linear 1; }
+			button { font-size: 200%; }
+			span,select {font-size: 200%; margin: 5px; user-select: none;}
+			table {margin: 5px; user-select: none; border: 1px solid #000; border-collapse: collapse; }
+			tr,td,th {padding: 0px 5px 2px 5px; border: 1px solid #000;  }
+			td { text-align: right; }
+		</style>
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+					"three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+				}
+			}
+		</script>
+	</head>
+	<body>
+		<div id="telop" class="no-select">
+			<div id="text"></div>
+		</div>
+		<div id="control">
+			<span>黒</span>
+			<select id="blackPlayer">
+				<option value="player" selected>PLAYER</option>
+				<option value="cpu1">CPU1</option>
+				<option value="cpu2">CPU2</option>
+				<option value="cpu3">CPU3</option>
+			</select>
+			<span style="margin-left: 20px;">白</span>
+			<select id="whitePlayer">
+				<option value="player">PLAYER</option>
+				<option value="cpu1" selected>CPU1</option>
+				<option value="cpu2">CPU2</option>
+				<option value="cpu3">CPU3</option>
+			</select>
+			<br><br>
+			<button id="start" style="display: block;">ゲームスタート</button>
+			<span id="turn"></span><br><span id="message"></span>
+			<br>
+		</div>
+		<div id="canvas" style="width: 100%; height: 100%;"></div>
+		<script type="module">
+			import * as THREE from 'three';
+			import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+			function getWidth()  { return canvas.getBoundingClientRect().width; }
+			function getHeight() { return canvas.getBoundingClientRect().height; }
+
+			const TAG_START			= document.getElementById('start');
+			const TAG_TURN			= document.getElementById('turn');
+			const TAG_MESSAGE		= document.getElementById('message');
+			const TAG_TELOP			= document.getElementById('telop');
+			const TAG_TELOP_TEXT	= TAG_TELOP.querySelector('#text');
+			const TAG_BLACK_PLAYER	= document.getElementById('blackPlayer');
+			const TAG_WHITE_PLAYER	= document.getElementById('whitePlayer');
+
+			const GEO_PIECE		= new THREE.SphereGeometry(0.035, 64, 32);
+			const MAT_WHITE 	= new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 0.6, roughness: 0.1});
+			const MAT_BLACK		= new THREE.MeshStandardMaterial({color: 0x000000, metalness: 0.5, roughness: 0.1});
+
+			const GEO_KNOB 		= new THREE.BoxGeometry(0.01, 0.01, 0.01);
+			const MAT_KNOB		= new THREE.MeshStandardMaterial({color: 0x909090});
+			const MAT_KNOB_OK	= new THREE.MeshStandardMaterial({color: 0x8080b0});
+			const MAT_KNOB_SEL	= new THREE.MeshStandardMaterial({color: 0x6060d0});
+
+			const GEO_LINE		= new THREE.BoxGeometry(0.1, 0.1, 0.1);
+			const MAT_LINEX		= new THREE.MeshStandardMaterial({color: 0xff0000, transparent: true, opacity: 0.3});
+			const MAT_LINE		= new THREE.MeshStandardMaterial({color: 0xffff00, transparent: true, opacity: 0.2});
+
+			const REN = 4;
+			const PIECE = {NONE: 'NONE', BLACK: 'BLACK', WHITE: 'WHITE'};
+			const LINE	= {NONE: 'NONE', X: 'X', Y: 'Y', Z: 'Z', XY1: 'XY1', XY2: 'XY2', XZ1: 'XZ1', XZ2: 'XZ2', YZ1: 'YZ1', YZ2: 'YZ2', XYZ1: 'XYZ1', XYZ2: 'XYZ2', XYZ3: 'XYZ3', XYZ4: 'XYZ4'};
+			const TIME = {SET: 60, TELOP: 'run'};
+			
+			const _meshes		= [];
+			const _field		= [];
+			let _turn			= null;
+			let _game			= false;
+			let _animation		= null;
+			let _selected	= null;
+			
+			function startGame() {
+				_game = true;
+				TAG_START.style.display = 'none';
+				_animation = null;
+				TAG_TURN.textContent = '';
+				TAG_MESSAGE.textContent = '';
+				unselect();
+				clearPieces();
+				setTurn(PIECE.BLACK);
+				TAG_BLACK_PLAYER.disabled = true;
+				TAG_WHITE_PLAYER.disabled = true;
+			}
+			function endGame() {
+				_game = false;
+				TAG_START.style.display = 'block';
+				_animation = null;
+				TAG_BLACK_PLAYER.disabled = false;
+				TAG_WHITE_PLAYER.disabled = false;
+			}
+			function select(stick) {
+				_selected = stick;
+				_selected.material = MAT_KNOB_SEL;
+			}
+			function unselect() {
+				if (getSelected() === null) { return; }
+				_selected.material = MAT_KNOB;
+				_selected = null;
+			}
+			function getSelected() { return _selected; }
+			function getField(x, y, z) {
+				if (x < 0 || x >= REN || y < 0 || y >=REN || z < 0 || z >= REN) { throw new Error('Internal error'); }
+				return _field[y*REN*REN + z*REN + x];
+			}
+			function setField(x, y, z, value) {
+				if (x < 0 || x >= REN || y < 0 || y >= REN || z < 0 || z >= REN || ![PIECE.BLACK, PIECE.WHITE, PIECE.NONE].includes(value)) { throw new Error('Internal error'); }
+				_field[y*REN*REN + z*REN + x] = value;
+			}
+
+			window.addEventListener('resize', () => {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize(window.innerWidth, window.innerHeight);
+			});
+			const raycaster = new THREE.Raycaster();
+			raycaster.layers.set(0);
+			const mouse = new THREE.Vector2();
+			function addMesh(mesh) {
+				scene.add(mesh);
+				_meshes.push(mesh);
+			}
+			function removeMeshes() {
+				_meshes.forEach((mesh) => scene.remove(mesh));
+				_meshes.length = 0;
+			}
+			window.addEventListener('click', (event) => {
+				if (!_game || inTelop() || _animation != null) { return; }
+				mouse.x =  (event.clientX / getWidth())  * 2 - 1;
+				mouse.y = -(event.clientY / getHeight()) * 2 + 1;
+				raycaster.setFromCamera(mouse, camera);
+				const intersects = raycaster.intersectObjects(scene.children, true);
+				if (intersects.length <= 0) { return; }
+				const hit = intersects[0].object;
+				if (hit.name == null || hit.name.length == 0) { return; }
+				if (getSelected() !== hit) { unselect(); select(hit); return; }
+				unselect();
+				const tmp = hit.name.split(',');
+				const x = Number(tmp[0]);
+				const y = Number(tmp[1]);
+				const z = Number(tmp[2]);
+				set(getTurn(), x, y, z);
+			});
+			function set(turn, x, y, z) {
+				console.log(turn, x, y, z);
+				const mesh = createPiece((turn == PIECE.WHITE)?MAT_WHITE:MAT_BLACK);
+				mesh.position.set(...getViewPos(x, y, z));
+				addMesh(mesh);
+				_animation = {mode: 'SET', x: x, y: y, z: z, piece: turn, mesh: mesh, animateTime: TIME.SET, counter: TIME.SET};
+				TAG_TURN.textContent = '';
+			}
+			function setTelop(str) {
+				console.log(str);
+				return new Promise(resolve => {
+					TAG_TELOP_TEXT.textContent = str;
+					TAG_TELOP_TEXT.classList.remove(TIME.TELOP);
+					void TAG_TELOP_TEXT.offsetWidth;
+					TAG_TELOP.style.display = "block";
+					TAG_TELOP_TEXT.classList.add(TIME.TELOP);
+					TAG_TELOP_TEXT.addEventListener("animationend", () => { TAG_TELOP.style.display = "none"; resolve(); }, { once: true });
+				});
+			}
+			function inTelop() { return TAG_TELOP.style.display == "block"; }
+			function isCpu1(turn) { return (turn === PIECE.BLACK && TAG_BLACK_PLAYER.value === 'cpu1') || (turn === PIECE.WHITE && TAG_WHITE_PLAYER.value === 'cpu1'); }
+			function isCpu2(turn) { return (turn === PIECE.BLACK && TAG_BLACK_PLAYER.value === 'cpu2') || (turn === PIECE.WHITE && TAG_WHITE_PLAYER.value === 'cpu2'); }
+			function isCpu3(turn) { return (turn === PIECE.BLACK && TAG_BLACK_PLAYER.value === 'cpu3') || (turn === PIECE.WHITE && TAG_WHITE_PLAYER.value === 'cpu3'); }
+			function getWinPositionList(turn) {
+				const list = [];
+				for (let x = 0; x < REN; ++x) {
+					for (let y = 0; y < REN; ++y) {
+						for (let z = 0; z < REN; ++z) {
+							if (getField(x, y, z) != PIECE.NONE) { continue; }
+							if (checkLine(x, y, z, turn).length !== 0) { list.push([x,y,z]); }
+						}
+					}
+				}
+				return list;
+			}
+			function pickOne(list) {
+				return list[Math.floor(Math.random()*list.length)];
+			}
+			const GAME = {WIN: 'WIN', EVEN: 'EVEN', LOOSE: 'LOOSE'};
+			function guess(turn, depth) {
+				if (depth == 0) { return GAME.EVEN; }
+				const list = getWinPositionList(turn);
+				if (list.length > 0) { return GAME.WIN; }
+
+				const enemy = (turn === PIECE.BLACK)?PIECE.WHITE:PIECE.BLACK;
+				let winCount = 0;
+				let looseCount = 0;
+				let skipCount = 0;
+				for (let x = 0; x < REN; ++x) {
+					for (let y = 0; y < REN; ++y) {
+						for (let z = 0; z < REN; ++z) {
+							if (getField(x, y, z) !== PIECE.NONE) { ++skipCount; continue; }
+							setField(x, y, z, turn);
+							const result = guess(enemy, depth-1);
+							if (result === GAME.WIN) { ++winCount; }
+							if (result === GAME.LOOSE) { ++looseCount; }
+							setField(x, y, z, PIECE.NONE);
+						}
+					}
+				}
+				if (skipCount === REN*REN*REN) { return GAME.EVEN; }
+				else if (looseCount + skipCount === REN*REN*REN) { return GAME.WIN; }
+				else if (winCount + skipCount === REN*REN*REN) { return GAME.LOOSE; }
+				return GAME.EVEN;
+			}
+			function turnCpu(turn, level) {
+				const depth = (level === 1)?1:2;
+				const enemy = (turn === PIECE.BLACK)?PIECE.WHITE:PIECE.BLACK;
+				// 1 move
+				let list = getWinPositionList(turn);
+				if (list.length !== 0) { return pickOne(list); }
+
+				// 2 move
+				const winList = [];
+				const evenList = [];
+				const looseList = [];
+				for (let x = 0; x < REN; ++x) {
+					for (let y = 0; y < REN; ++y) {
+						for (let z = 0; z < REN; ++z) {
+							if (getField(x, y, z) !== PIECE.NONE) { continue; }
+							setField(x, y, z, turn);
+							switch (guess(enemy, depth)) {
+								case GAME.WIN:		looseList.push([x,y,z]);	break;
+								case GAME.LOOSE:	winList.push([x,y,z]);	break;
+								case GAME.EVEN:		evenList.push([x,y,z]);	break;
+							}
+							setField(x, y, z, PIECE.NONE);
+						}
+					}
+				}
+				if (winList.length !== 0) {
+					console.log(turn, '勝ったな');
+					return pickOne(winList);
+				}
+				else if (evenList.length === 1) {
+					console.log(turn, 'おっと');
+					return pickOne(evenList);
+				}
+				else if (evenList.length === 0) {
+					console.log(turn, 'やばい');
+					list = getWinPositionList(enemy);
+					return pickOne((list.length !== 0)?list:looseList);
+				}
+				
+				if (level === 3) {
+					const valueList = [];
+					let maxValue = -1;
+					evenList.forEach(([x,y,z]) => {
+						const enemyValue = checkLine(x, y, z, enemy, 1).length;
+						const value = enemyValue;
+						if (value > maxValue) { maxValue = value; valueList.length = 0; }
+						if (value === maxValue) { valueList.push([x,y,z]); }
+					});
+					if (valueList.length > 0) { return pickOne(valueList); }
+				}
+				return pickOne(evenList);
+			}
+			TAG_START.addEventListener('click', () => startGame());
+			function createPiece(mat) {
+				const piece = new THREE.Mesh(GEO_PIECE, mat);
+				return piece;
+			}
+			function getViewPos(x, y, z) { return [(x-(REN-1)/2)*0.1, (y-(REN-1)/2)*0.1, (z-(REN-1)/2)*0.1]; }
+			function setTurn(turn) {
+				_turn = turn;
+				TAG_TURN.textContent = ((turn === PIECE.BLACK)?'黒':'白')+'の番です';
+				TAG_MESSAGE.textContent = '';
+				if		(isCpu1(turn)) { set(turn, ...turnCpu(turn, 1)); }
+				else if (isCpu2(turn)) { set(turn, ...turnCpu(turn, 2)); }
+				else if (isCpu3(turn)) { set(turn, ...turnCpu(turn, 3)); }
+			}
+			function getTurn() { return _turn; }
+			function changeTurn() { setTurn((getTurn() == PIECE.BLACK)?PIECE.WHITE:PIECE.BLACK); }
+			function checkLine(x, y, z, piece, allowNone = 0) {
+				const lines = [];
+				// X軸方向
+				let result = true;
+				let noneCount = 0;
+				for (let i = 0; i < REN; ++i) {
+					if (i === x) { continue; }
+					let fieldPiece = getField(i, y, z);
+					if (fieldPiece === PIECE.NONE) {
+						++noneCount;
+						if (noneCount <= allowNone) { fieldPiece = piece; }
+					}
+					if (fieldPiece !== piece) { result = false; }
+				}
+				if (result == true) { lines.push(LINE.X); }
+
+				// Y軸方向
+				result = true;
+				noneCount = 0;
+				for (let i = 0; i < REN; ++i) {
+					if (i === y) { continue; }
+					let fieldPiece = getField(x, i, z);
+					if (fieldPiece === PIECE.NONE) {
+						++noneCount;
+						if (noneCount <= allowNone) { fieldPiece = piece; }
+					}
+					if (fieldPiece !== piece) { result = false; }
+				}
+				if (result == true) { lines.push(LINE.Y); }
+
+				// Z軸方向
+				result = true;
+				noneCount = 0;
+				for (let i = 0; i < REN; ++i) {
+					if (i === z) { continue; }
+					let fieldPiece = getField(x, y, i);
+					if (fieldPiece === PIECE.NONE) {
+						++noneCount;
+						if (noneCount <= allowNone) { fieldPiece = piece; }
+					}
+					if (fieldPiece !== piece) { result = false; }
+				}
+				if (result == true) { lines.push(LINE.Z); }
+
+				// XY軸方向1
+				if (x == y) {
+					result = true;
+					noneCount = 0;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						let fieldPiece = getField(i, i, z);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XY1); }
+				}
+
+				// XY軸方向2
+				if (x+y == REN-1) {
+					result = true;
+					noneCount = 0;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						let fieldPiece = getField(i, REN-1-i, z);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XY2); }
+				}
+
+				// XZ軸方向1
+				if (x == z) {
+					result = true;
+					noneCount = 0;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						let fieldPiece = getField(i, y, i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XZ1); }
+				}
+
+				// XZ軸方向2
+				if (x+z == REN-1) {
+					result = true;
+					noneCount = 0;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						let fieldPiece = getField(i, y, REN-1-i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XZ2); }
+				}
+
+				// YZ軸方向1
+				if (y == z) {
+					result = true;
+					noneCount = 0;
+					for (let i = 0; i < REN; ++i) {
+						if (i === y) { continue; }
+						let fieldPiece = getField(x, i, i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.YZ1); }
+				}
+
+				// YZ軸方向2
+				if (y+z == REN-1) {
+					result = true;
+					noneCount = 0;
+					for (let i = 0; i < REN; ++i) {
+						if (i === y) { continue; }
+						let fieldPiece = getField(x, i, REN-1-i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.YZ2); }
+				}
+
+				// XYZ軸方向1
+				if (x == y && z == x) {
+					result = true;
+					noneCount = 0;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						let fieldPiece = getField(i, i, i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XYZ1); }
+				}
+
+				// XYZ軸方向2
+				if (x == y && x+z == REN-1) {
+					result = true;
+					noneCount = 0;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						let fieldPiece = getField(i, i, REN-1-i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XYZ2); }
+				}
+
+				// XYZ軸方向3
+				if (x+y == REN-1 && z == x) {
+					result = true;
+					noneCount = 0;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						let fieldPiece = getField(i, REN-1-i, i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XYZ3); }
+				}
+
+				// XYZ軸方向4
+				if (x+y == REN-1 && x+z == REN-1) {
+					result = true;
+					noneCount = 0;
+					for (let i = 0; i < REN; ++i) {
+						if (i === x) { continue; }
+						let fieldPiece = getField(i, REN-1-i, REN-1-i);
+						if (fieldPiece === PIECE.NONE) {
+							++noneCount;
+							if (noneCount <= allowNone) { fieldPiece = piece; }
+						}
+						if (fieldPiece !== piece) { result = false; }
+					}
+					if (result == true) { lines.push(LINE.XYZ4); }
+				}
+				return lines;
+			}
+			function existNone() {
+				for (let x = 0; x < REN; ++x) {
+					for (let y = 0; y < REN; ++y) {
+						for (let z = 0; z < REN; ++z) {
+							if (getField(x, y, z) === PIECE.NONE) { return true; }
+						}
+					}
+				}
+				return false;
+			}
+			function draw() {
+				setTelop('引き分けです');
+				TAG_TURN.textContent = '';
+				TAG_MESSAGE.textContent = '';
+				_animation = {mode: 'DRAW'};
+			}
+			function win(x, y, z, lines, piece) {
+				setTelop(((piece == PIECE.BLACK)?'黒':'白')+'の勝ちです');
+				TAG_TURN.textContent = '';
+				TAG_MESSAGE.textContent = '';
+				_animation = {mode: 'END', x: x, y: y, z: z, lines: lines};
+			}
+			function initField() {
+				for (let x = 0; x < REN; ++x) {
+					for (let y = 0; y < REN; ++y) {
+						for (let z = 0; z < REN; ++z) { setField(x, y, z, PIECE.NONE); }
+					}
+				}
+				const g = new THREE.Group();
+				const points = [];
+				for (let i = 0; i <= REN; ++i) {
+					for (let j = 0; j <= REN; ++j) {
+						points.push(new THREE.Vector3(...getViewPos(i-0.5,		j-0.5,		-0.5)));
+						points.push(new THREE.Vector3(...getViewPos(i-0.5,		j-0.5,		REN-0.5)));
+						points.push(new THREE.Vector3(...getViewPos(i-0.5,		-0.5,		j-0.5)));
+						points.push(new THREE.Vector3(...getViewPos(i-0.5,		REN-0.5,	j-0.5)));
+						points.push(new THREE.Vector3(...getViewPos(-0.5,		i-0.5,		j-0.5)));
+						points.push(new THREE.Vector3(...getViewPos(REN-0.5,	i-0.5,		j-0.5)));
+					}
+				}
+				const geometry = new THREE.BufferGeometry().setFromPoints(points);
+				const material = new THREE.LineBasicMaterial({color: 0xffff80});
+				const segments = new THREE.LineSegments(geometry, material);
+				segments.layers.set(1);
+				g.add(segments);				
+
+				for (let y = 0; y < REN; ++y) {
+					for (let z = 0; z < REN; ++z) {
+						for (let x = 0; x < REN; ++x) {
+							const knob = new THREE.Mesh(GEO_KNOB, MAT_KNOB);
+							knob.name = `${x},${y},${z}`;
+							knob.position.set(...getViewPos(x, y, z));
+							g.add(knob);
+						}
+					}
+				}
+				scene.add(g);
+			}
+			function clearPieces() {
+				for (let x = 0; x < REN; ++x) {
+					for (let y = 0; y < REN; ++y) {
+						for (let z = 0; z < REN; ++z) { setField(x, y, z, PIECE.NONE); }
+					}
+				}
+				removeMeshes();
+			}
+			function drawLines(x, y, z, lines) {
+				const piece = getField(x, y, z); 
+				const mesh = new THREE.Mesh(GEO_LINE, MAT_LINEX);
+				mesh.position.set(...getViewPos(x, y, z));
+				addMesh(mesh);
+				lines.forEach((line) => {
+					switch (line) {
+						case LINE.X: {
+							for (let i = 0; i < REN; ++i) {
+								if (i === x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, y, z));
+								addMesh(mesh);
+							}
+						}
+						break;
+						
+						case LINE.Y: {
+							for (let i = 0; i < REN; ++i) {
+								if (i === y) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(x, i, z));
+								addMesh(mesh);
+							}
+						}
+						break;
+						
+						case LINE.Z: {
+							for (let i = 0; i < REN; ++i) {
+								if (i === z) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(x, y, i));
+								addMesh(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XY1: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, i, z));
+								addMesh(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XY2: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, REN-1-i, z));
+								addMesh(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XZ1: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, y, i));
+								addMesh(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XZ2: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, y, REN-1-i));
+								addMesh(mesh);
+							}
+						}
+						break;
+						
+						case LINE.YZ1: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == y) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(x, i, i));
+								addMesh(mesh);
+							}
+						}
+						break;
+						
+						case LINE.YZ2: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == y) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(x, i, REN-1-i));
+								addMesh(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XYZ1: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, i, i));
+								addMesh(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XYZ2: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, i, REN-1-i));
+								addMesh(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XYZ3: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, REN-1-i, i));
+								addMesh(mesh);
+							}
+						}
+						break;
+						
+						case LINE.XYZ4: {
+							for (let i = 0; i < REN; ++i) {
+								if (i == x) { continue; }
+								const mesh = new THREE.Mesh(GEO_LINE, MAT_LINE);
+								mesh.position.set(...getViewPos(i, REN-1-i, REN-1-i));
+								addMesh(mesh);
+							}
+						}
+						break;
+					}
+				});
+			}
+			
+			const scene = new THREE.Scene();
+			scene.background = new THREE.Color(0x88cc88);
+			const directionLight = new THREE.DirectionalLight(0xffffff, 4);
+			directionLight.position.set(2, 1, 2);
+			scene.add(directionLight);
+			const ambientLight = new THREE.AmbientLight(0xffffff, 2);
+			scene.add(ambientLight);
+			const renderer = new THREE.WebGLRenderer({antialias: true});
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+			camera.layers.enable(1);
+			camera.position.set(-0.3, 0.3, 1);
+			const controls = new OrbitControls(camera, renderer.domElement);
+			controls.maxPolarAngle = Math.PI/2+Math.PI/10;
+			controls.target.set(0, 0, 0);
+			controls.update();
+			renderer.render(scene, camera);
+			document.querySelector('#canvas').appendChild(renderer.domElement);
+
+			function animate() {
+				requestAnimationFrame(animate);
+				if (_game && !inTelop() && _animation != null) {
+					switch (_animation.mode) {
+						case 'SET': {
+							--_animation.counter;
+							if (_animation.counter == 0) {
+								_animation.mesh.visible = true;
+								setField(_animation.x, _animation.y, _animation.z, _animation.piece);
+								const lines = checkLine(_animation.x, _animation.y, _animation.z, _animation.piece);
+								if (lines.length != 0) { win(_animation.x, _animation.y, _animation.z, lines, _animation.piece); return; }
+								if (!existNone()) { draw(); return; }
+								_animation = null;
+								setTimeout(changeTurn, 1);
+							}
+							else {
+								_animation.mesh.visible = (_animation.counter%8 < 4)?true:false;
+							}
+						}
+						break;
+						
+						case 'END': {
+							drawLines(_animation.x, _animation.y, _animation.z, _animation.lines);
+							_animation = null;
+							setTimeout(endGame, 1);
+						}
+						break;
+						
+						case 'DRAW': {
+							_animation = null;
+							setTimeout(endGame, 1);
+						}
+						break;
+					}
+				}
+				renderer.setSize(window.innerWidth, window.innerHeight);
+				renderer.render(scene, camera);
+			}
+			
+			function setParameter() {
+				const params = new URLSearchParams(window.location.search);
+				let tmp = Number(params.get('speed'));
+				if (Number.isNaN(tmp) || tmp < 1) { tmp = 60; }
+				TIME.SET = tmp;
+				TIME.TELOP = (TIME.SET === 1)?'superrun':'run';
+			}
+			
+			setParameter();
+			initField();
+			animate();
+			
+		</script>
+	</body>
+</html>
