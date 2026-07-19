@@ -1,0 +1,556 @@
+<html>
+	<head>
+		<style>
+			#telop  { position: absolute; top: 30%; left: 0%; z-index: 3; width: 100%; overflow: hidden; white-space: nowrap; text-align: center; display: none; user-select: none;}
+			#control { position: absolute; top: 10px; left: 10px; z-index: 1; }
+			#scoreBoard { position: absolute; bottom: 10px; right: 10px; z-index: 1; }
+			#canvas  { position: absolute; top: 0px; left: 0px; z-index: 0; }
+			#telop #text { display: inline-block; padding: 2% 6%; font-size: 800%; color: yellow; background: black; white-space: pre; }
+			@keyframes marquee { 0% { transform: translateX(150%); } 100% { transform: translateX(-150%); } }
+			.run { animation: marquee 4s linear 1; }
+			.superrun { animation: marquee 1s linear 1; }
+			button { font-size: 200%; }
+			span,select {font-size: 200%; margin: 5px; user-select: none;}
+			table {margin: 5px; user-select: none; border: 1px solid #000; border-collapse: collapse; }
+			tr,td,th {padding: 0px 5px 2px 5px; border: 1px solid #000;  }
+			td { text-align: right; }
+		</style>
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+					"three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+				}
+			}
+		</script>
+	</head>
+	<body>
+		<div id="telop" class="no-select">
+			<div id="text"></div>
+		</div>
+		<div id="control">
+			<span>黒</span>
+			<select id="blackPlayer">
+				<option value="player" selected>PLAYER</option>
+				<option value="cpu1">CPU1</option>
+				<option value="cpu2">CPU2</option>
+			</select>
+			<span style="margin-left: 20px;">白</span>
+			<select id="whitePlayer">
+				<option value="player">PLAYER</option>
+				<option value="cpu1" selected>CPU1</option>
+				<option value="cpu2">CPU2</option>
+			</select>
+			<button id="debug" style="display: none;">debug</button>
+			<button id="clear" style="display: none;">clear</button>
+			<button id="start" style="display: inline; margin-left: 40px;">ゲームスタート</button>
+			<br><br><span id="turn"></span>
+			<br>
+		</div>
+		<div id="scoreBoard"><span id="score" style="white-space: pre;"></span></div>
+		<div id="canvas" style="width: 100%; height: 100%;"></div>
+		<script type="module">
+			import * as THREE from 'three';
+			import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+			function getWidth()  { return canvas.getBoundingClientRect().width; }
+			function getHeight() { return canvas.getBoundingClientRect().height; }
+
+			const TAG_START			= document.getElementById('start');
+			const TAG_TURN			= document.getElementById('turn');
+			const TAG_SCORE			= document.getElementById('score');
+			const TAG_TELOP			= document.getElementById('telop');
+			const TAG_TELOP_TEXT	= TAG_TELOP.querySelector('#text');
+			const TAG_BLACK_PLAYER	= document.getElementById('blackPlayer');
+			const TAG_WHITE_PLAYER	= document.getElementById('whitePlayer');
+
+			const GEO_PIECE		= new THREE.SphereGeometry(0.035, 64, 32);
+			const MAT_WHITE 	= new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 0.6, roughness: 0.1});
+			const MAT_BLACK		= new THREE.MeshStandardMaterial({color: 0x000000, metalness: 0.5, roughness: 0.1});
+
+			const GEO_KNOB 		= new THREE.BoxGeometry(0.01, 0.01, 0.01);
+			const MAT_KNOB		= new THREE.MeshStandardMaterial({color: 0x909090});
+			const MAT_KNOB_SEL	= new THREE.MeshStandardMaterial({color: 0x6060d0});
+
+			const REN = 4;
+			const PIECE = {NONE: 'NONE', BLACK: 'BLACK', WHITE: 'WHITE', ERROR: 'ERROR'};
+			const LINE	= {NONE: 'NONE', X: 'X', Y: 'Y', Z: 'Z', XY1: 'XY1', XY2: 'XY2', XZ1: 'XZ1', XZ2: 'XZ2', YZ1: 'YZ1', YZ2: 'YZ2', XYZ1: 'XYZ1', XYZ2: 'XYZ2', XYZ3: 'XYZ3', XYZ4: 'XYZ4'};
+			const TIME = {SET: 60, REVERSE: 20, TELOP: 'run'};
+			const DIRECTION = [];
+			
+			let _field			= [];
+			const _meshField	= [];
+			const _knob			= [];
+			const _fieldStack	= [];
+
+			let _turn			= null;
+			let _game			= false;
+			let _animation		= null;
+			let _selected		= null;
+			document.getElementById('debug').addEventListener('click', () => {
+				for (let z = 0; z < REN; ++z) {
+					for (let y = 0; y < REN; ++y) {
+						let str = '';
+						for (let x = 0; x < REN; ++x) {
+							switch (_field[z*REN*REN + y*REN + x]) {
+								case PIECE.WHITE: str += 'W'; break;
+								case PIECE.BLACK: str += 'B'; break;
+								default: str += '-'; break;
+							}
+						}
+						console.log(str);
+					}
+				}
+				console.log('*****');
+			});
+			document.getElementById('clear').addEventListener('click', () => console.clear());
+			function startGame() {
+				_game = true;
+				TAG_START.style.display = 'none';
+				_animation = null;
+				TAG_TURN.textContent = '';
+				TAG_SCORE.textContent = '';
+				unselect();
+				setupPieces();
+				setTurn(PIECE.BLACK);
+				TAG_BLACK_PLAYER.disabled = true;
+				TAG_WHITE_PLAYER.disabled = true;
+			}
+			function endGame() {
+				_game = false;
+				TAG_START.style.display = 'inline';
+				_animation = null;
+				TAG_BLACK_PLAYER.disabled = false;
+				TAG_WHITE_PLAYER.disabled = false;
+			}
+			function select(stick) {
+				_selected = stick;
+				_selected.material = MAT_KNOB_SEL;
+			}
+			function unselect() {
+				if (getSelected() === null) { return; }
+				_selected.material = MAT_KNOB;
+				_selected = null;
+			}
+			function getSelected() { return _selected; }
+			function getField(x, y, z) {
+				if (x < 0 || x >= REN || y < 0 || y >=REN || z < 0 || z >= REN) { return PIECE.ERROR; }
+				return _field[z*REN*REN + y*REN + x];
+			}
+			function setField(x, y, z, value) {
+				if (x < 0 || x >= REN || y < 0 || y >= REN || z < 0 || z >= REN || ![PIECE.BLACK, PIECE.WHITE, PIECE.NONE].includes(value)) { throw new Error('Internal error'); }
+				_field[z*REN*REN + y*REN + x] = value;
+			}
+			function showScore() { TAG_SCORE.textContent = `黒: ${getScore(PIECE.BLACK)}      白: ${getScore(PIECE.WHITE)}`; }
+			
+			function pushField() { _fieldStack.push([..._field]); }
+			function popField() { _field = _fieldStack.pop(); }
+
+			window.addEventListener('resize', () => {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize(window.innerWidth, window.innerHeight);
+			});
+			const raycaster = new THREE.Raycaster();
+			raycaster.layers.set(0);
+			const mouse = new THREE.Vector2();
+			function setMesh(x,y,z,mesh) {
+				const old = _meshField[z*REN*REN + y*REN + x];
+				if (old !== null) { scene.remove(old); }
+				if (mesh !== null) { mesh.position.set(...getViewPos(x, y, z)); scene.add(mesh); }
+				_meshField[z*REN*REN + y*REN + x] = mesh;
+			}
+			
+			window.addEventListener('click', (event) => {
+				if (!_game || inTelop() || _animation != null) { return; }
+				mouse.x =  (event.clientX / getWidth())  * 2 - 1;
+				mouse.y = -(event.clientY / getHeight()) * 2 + 1;
+				raycaster.setFromCamera(mouse, camera);
+				const intersects = raycaster.intersectObjects(scene.children, true);
+				if (intersects.length <= 0) { return; }
+				const hit = intersects[0].object;
+				if (hit.name == null || hit.name.length == 0) { return; }
+				if (getSelected() !== hit) { unselect(); select(hit); return; }
+				unselect();
+				const tmp = hit.name.split(',');
+				const [x,y,z] = [Number(tmp[0]),Number(tmp[1]),Number(tmp[2])];
+				set(getTurn(), x, y, z);
+				hideKnob();
+			});
+			function set(turn, x, y, z) {
+				if (getField(x,y,z) !== PIECE.NONE) { console.log('internal error'); }
+				console.log(x,y,z,turn);
+				const mesh = createPiece(turn);
+				setMesh(x,y,z,mesh);
+				_animation = {mode: 'SET', x: x, y: y, z: z, piece: turn, mesh: mesh, animateTime: TIME.SET, counter: TIME.SET};
+				TAG_TURN.textContent = '';
+			}
+			function setTelop(str) {
+				console.log(str);
+				return new Promise(resolve => {
+					TAG_TELOP_TEXT.textContent = str;
+					TAG_TELOP_TEXT.classList.remove(TIME.TELOP);
+					void TAG_TELOP_TEXT.offsetWidth;
+					TAG_TELOP.style.display = "block";
+					TAG_TELOP_TEXT.classList.add(TIME.TELOP);
+					TAG_TELOP_TEXT.addEventListener("animationend", () => { TAG_TELOP.style.display = "none"; resolve(); }, { once: true });
+				});
+			}
+			function inTelop() { return TAG_TELOP.style.display == "block"; }
+			function isCpu1(turn) { return (turn === PIECE.BLACK && TAG_BLACK_PLAYER.value === 'cpu1') || (turn === PIECE.WHITE && TAG_WHITE_PLAYER.value === 'cpu1'); }
+			function isCpu2(turn) { return (turn === PIECE.BLACK && TAG_BLACK_PLAYER.value === 'cpu2') || (turn === PIECE.WHITE && TAG_WHITE_PLAYER.value === 'cpu2'); }
+			function pickOne(list) { return list[Math.floor(Math.random()*list.length)]; }
+			const GAME = {WIN: 'WIN', EVEN: 'EVEN', LOOSE: 'LOOSE'};
+			function calcValue(x,y,z,piece,depth) {
+				const enemy = (piece === PIECE.BLACK)?PIECE.WHITE:PIECE.BLACK;
+				let reverseList = getReverseList(x,y,z,piece);
+				if (depth === 1) { return reverseList.length + 1; }
+				pushField();
+				setField(x,y,z,piece);
+				let result = reverseList.length + 1;
+				reverseList.forEach(([x1,y1,z1]) => setField(x1,y1,z1,piece));
+				const canSetList = getCanSetList(enemy);
+				if (canSetList.length === 0) { popField(); return result; }
+				let max = -99;
+				for (let i = 0; i < canSetList.length; ++i) {
+					const value = calcValue(...canSetList[i],enemy,depth-1);
+					max = Math.max(value, max);
+				}
+				popField();
+				return result - max;
+			}
+			function isCorner(x,y,z) { return ((x === 0 || x === REN-1) && (y === 0 || y === REN-1) && (z === 0 || z === REN-1))?true:false; }
+			function isOwnSide(x,y,z,piece) {
+				if ((y === 0 || y === REN-1) && (z === 0 || z === REN-1)) {
+					if (getField(0,y,z) === piece) {
+						if (x === 1 || (x === 2 && getField(1,y,z) !== PIECE.NONE)) { return true; }
+					}
+					if (getField(REN-1,y,z) === piece) {
+						if (x === REN-2 || (x === REN-3 && getField(REN-2,y,z) !== PIECE.NONE)) { return true; }
+					}
+				}
+				if ((x === 0 || x === REN-1) && (z === 0 || z === REN-1)) {
+					if (getField(x,0,z) === piece) {
+						if (y === 1 || (y === 2 && getField(x,1,z) !== PIECE.NONE)) { return true; }
+					}
+					if (getField(x,REN-1,z) === piece) {
+						if (y === REN-2 || (y === REN-3 && getField(x,REN-2,z) !== PIECE.NONE)) { return true; }
+					}
+				}
+				if ((x === 0 || x === REN-1) && (y === 0 || y === REN-1)) {
+					if (getField(x,y,0) === piece) {
+						if (z === 1 || (z === 2 && getField(x,y,1) !== PIECE.NONE)) { return true; }
+					}
+					if (getField(x,y,REN-1) === piece) {
+						if (z === REN-2 || (z === REN-3 && getField(x,y,REN-2) !== PIECE.NONE)) { return true; }
+					}
+				}
+				return false;
+			}
+			function turnCpu(turn, level) {
+				const canSetList = getCanSetList(turn);
+				// priority check
+				const candidateList = [];
+				canSetList.forEach((elem) => {
+					if (isCorner(...elem)) { candidateList.push(elem); }
+				});
+				if (candidateList.length !== 0) { return pickOne(candidateList); }
+				
+				if (level === 2) {
+					canSetList.forEach((elem) => {
+						if (isOwnSide(...elem, turn)) { candidateList.push(elem); }
+					});
+					if (candidateList.length !== 0) { return pickOne(candidateList); }
+				}
+				
+				// look ahead check
+				let max = -99;
+				for (let i = 0; i < canSetList.length; ++i) {
+					const value = calcValue(...canSetList[i],turn,(level === 1)?1:4);
+					if (value > max) { max = value; candidateList.length = 0; }
+					if (value === max) { candidateList.push(canSetList[i]); }
+				}
+				return pickOne(candidateList);
+			}
+			TAG_START.addEventListener('click', () => startGame());
+			function createPiece(piece) { return new THREE.Mesh(GEO_PIECE, (piece == PIECE.WHITE)?MAT_WHITE:MAT_BLACK); }
+			function getViewPos(x, y, z) { return [(x-(REN-1)/2)*0.1, (y-(REN-1)/2)*0.1, (z-(REN-1)/2)*0.1]; }
+			function canSet(x, y, z, piece) {
+				if (_field[z*REN*REN + y*REN + x] !== PIECE.NONE) { return false; }
+				const enemy = (piece === PIECE.BLACK)?PIECE.WHITE:PIECE.BLACK;
+				for (const [dx,dy,dz] of DIRECTION) {
+					let [x1, y1, z1] = [x+dx, y+dy, z+dz];
+					let tmp = getField(x1, y1, z1);
+					if (tmp === PIECE.ERROR) { continue; }
+					if (tmp === enemy) {
+						while (true) {
+							[x1, y1, z1] = [x1+dx, y1+dy, z1+dz];
+							tmp = getField(x1, y1, z1);
+							if (tmp === piece) { return true; }
+							if (tmp !== enemy) { break; }
+						}
+					}
+				}
+				return false;
+			}
+			function getCanSetList(piece) {
+				const list = [];
+				for (let z = 0; z < REN; ++z) {
+					for (let y = 0; y < REN; ++y) {
+						for (let x = 0; x < REN; ++x) {
+							if (canSet(x, y, z, piece)) { list.push([x,y,z]); }
+						}
+					}
+				}
+				return list;
+			}
+			function isPass(piece) {
+				for (let z = 0; z < REN; ++z) {
+					for (let y = 0; y < REN; ++y) {
+						for (let x = 0; x < REN; ++x) {
+							if (canSet(x, y, z, piece)) { return false; }
+						}
+					}
+				}
+				return true;
+			}
+			function doPass(turn) {
+				TAG_TURN.textContent =　((turn === PIECE.BLACK)?'黒':'白')+'は置くところがないのでパスになります';
+				console.log(TAG_TURN.textContent);
+				if (!isCpu1(turn) && !isCpu2(turn)) { setTelop(TAG_TURN.textContent); }
+			}
+			function getReverseList(x, y, z, piece) {
+				const list = [];
+				const enemy = (piece === PIECE.BLACK)?PIECE.WHITE:PIECE.BLACK;
+				for (const [dx,dy,dz] of DIRECTION) {
+					let [x1, y1, z1] = [x+dx, y+dy, z+dz];
+					let tmp = getField(x1, y1, z1);
+					if (tmp === PIECE.ERROR) { continue; }
+					if (tmp === enemy) {
+						const subList = [];
+						subList.push([x1,y1,z1]);
+						while (true) {
+							[x1, y1, z1] = [x1+dx, y1+dy, z1+dz];
+							tmp = getField(x1, y1, z1);
+							if (tmp === piece) { list.push(...subList); break; }
+							if (tmp !== enemy) { break; }
+							subList.push([x1,y1,z1]);
+						}
+					}
+				}
+				return list;
+			}
+			function getScore(piece) {
+				let result = 0;
+				for (let z = 0; z < REN; ++z) {
+					for (let y = 0; y < REN; ++y) {
+						for (let x = 0; x < REN; ++x) {
+							if (piece === getField(x,y,z)) { ++result; }
+						}
+					}
+				}
+				return result;
+			}
+			function hideKnob() {
+				for (let z = 0; z < REN; ++z) {
+					for (let y = 0; y < REN; ++y) {
+						for (let x = 0; x < REN; ++x) { _knob[z*REN*REN + y*REN + x].layers.set(2); }
+					}
+				}
+			}
+			function showKnob(turn) {
+				if (isCpu1(turn) || isCpu2(turn)) { return; }
+				for (let z = 0; z < REN; ++z) {
+					for (let y = 0; y < REN; ++y) {
+						for (let x = 0; x < REN; ++x) {
+							if (canSet(x, y, z, turn)) { _knob[z*REN*REN + y*REN + x].layers.set(0); }
+						}
+					}
+				}
+			}
+			function setTurn(turn) {
+				_turn = turn;
+				showKnob(turn);
+				TAG_TURN.textContent = ((turn === PIECE.BLACK)?'黒':'白')+'の番です';
+				if		(isCpu1(turn)) { set(turn, ...turnCpu(turn, 1)); }
+				else if (isCpu2(turn)) { set(turn, ...turnCpu(turn, 2)); }
+			}
+			function getTurn() { return _turn; }
+			function changeTurn() { setTurn((getTurn() == PIECE.BLACK)?PIECE.WHITE:PIECE.BLACK); }
+			function win(black, white) {
+				setTelop((black === white)?'引き分けです':(black>white)?'黒の勝ちです':'白の勝ちです');
+				TAG_TURN.textContent = (black+white !== REN*REN*REN)?'両者とも置く場所がないためゲーム終了となります':'';
+				console.log(TAG_TURN.textContent);
+				_animation = {mode: 'END'};
+			}
+			function initField() {
+				for (let z = 0; z < REN; ++z) {
+					for (let y = 0; y < REN; ++y) {
+						for (let x = 0; x < REN; ++x) {
+							setMesh(x, y, z, null);
+							setField(x, y, z, PIECE.NONE);
+						}
+					}
+				}
+				const g = new THREE.Group();
+				const points = [];
+				for (let i = 0; i <= REN; ++i) {
+					for (let j = 0; j <= REN; ++j) {
+						points.push(new THREE.Vector3(...getViewPos(i-0.5,		j-0.5,		-0.5)));
+						points.push(new THREE.Vector3(...getViewPos(i-0.5,		j-0.5,		REN-0.5)));
+						points.push(new THREE.Vector3(...getViewPos(i-0.5,		-0.5,		j-0.5)));
+						points.push(new THREE.Vector3(...getViewPos(i-0.5,		REN-0.5,	j-0.5)));
+						points.push(new THREE.Vector3(...getViewPos(-0.5,		i-0.5,		j-0.5)));
+						points.push(new THREE.Vector3(...getViewPos(REN-0.5,	i-0.5,		j-0.5)));
+					}
+				}
+				const geometry = new THREE.BufferGeometry().setFromPoints(points);
+				const material = new THREE.LineBasicMaterial({color: 0xffff80});
+				const segments = new THREE.LineSegments(geometry, material);
+				segments.layers.set(1);
+				g.add(segments);				
+
+				for (let x = -1; x <= 1; ++x) {
+					for (let y = -1; y <= 1; ++y) {
+						for (let z = -1; z <= 1; ++z) {
+							if (x == 0 && y == 0 && z == 0) { continue; }
+							DIRECTION.push([x,y,z]);
+						}
+					}
+				}
+				for (let z = 0; z < REN; ++z) {
+					for (let y = 0; y < REN; ++y) {
+						for (let x = 0; x < REN; ++x) {
+							const knob = new THREE.Mesh(GEO_KNOB, MAT_KNOB);
+							knob.name = `${x},${y},${z}`;
+							knob.position.set(...getViewPos(x, y, z));
+							g.add(knob);
+							_knob.push(knob);
+						}
+					}
+				}
+				hideKnob();
+				scene.add(g);
+			}
+			function setupPieces() {
+				for (let z = 0; z < REN; ++z) {
+					for (let y = 0; y < REN; ++y) {
+						for (let x = 0; x < REN; ++x) {
+							setMesh(x, y, z, null);
+							setField(x, y, z, PIECE.NONE);
+						}
+					}
+				}
+				[[1,1,1,PIECE.WHITE],[2,2,1,PIECE.WHITE],[1,2,2,PIECE.WHITE],[2,1,2,PIECE.WHITE],
+				 [1,1,2,PIECE.BLACK],[2,2,2,PIECE.BLACK],[1,2,1,PIECE.BLACK],[2,1,1,PIECE.BLACK]].forEach(([x,y,z,piece]) => {
+					const mesh = createPiece(piece);
+					setMesh(x,y,z,mesh);
+					setField(x,y,z,piece);
+				});
+				showScore();
+			}
+			
+			const scene = new THREE.Scene();
+			scene.background = new THREE.Color(0x88cc88);
+			const directionLight = new THREE.DirectionalLight(0xffffff, 4);
+			directionLight.position.set(2, 1, 2);
+			scene.add(directionLight);
+			const ambientLight = new THREE.AmbientLight(0xffffff, 2);
+			scene.add(ambientLight);
+			const renderer = new THREE.WebGLRenderer({antialias: true});
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+			camera.layers.enable(1);
+			camera.position.set(-0.3, 0.3, 1);
+			const controls = new OrbitControls(camera, renderer.domElement);
+			controls.maxPolarAngle = Math.PI/2+Math.PI/10;
+			controls.target.set(0, 0, 0);
+			controls.update();
+			renderer.render(scene, camera);
+			document.querySelector('#canvas').appendChild(renderer.domElement);
+
+			function animate() {
+				requestAnimationFrame(animate);
+				if (_game && !inTelop() && _animation != null) {
+					switch (_animation.mode) {
+						case 'SET': {
+							--_animation.counter;
+							if (_animation.counter === 0) {
+								_animation.mesh.visible = true;
+								const reverseList = getReverseList(_animation.x, _animation.y, _animation.z, _animation.piece);
+								if (reverseList.length === 0) { console.log('internal error'); }
+								setField(_animation.x, _animation.y, _animation.z, _animation.piece);
+								showScore();
+								_animation = {mode: 'REVERSE', list: reverseList, piece: _animation.piece, animateTime: TIME.REVERSE, counter: TIME.REVERSE};
+							}
+							else {
+								_animation.mesh.visible = (_animation.counter%8 < 4)?true:false;
+							}
+						}
+						break;
+						
+						case 'REVERSE': {
+							--_animation.counter;
+							if (_animation.counter === 0) {
+								const [x,y,z] = _animation.list.shift();
+								const piece = _animation.piece;
+								const mesh = createPiece(piece);
+								setMesh(x,y,z,mesh);
+								setField(x,y,z, piece);
+								showScore();
+								if (_animation.list.length === 0) {
+									const [b, w] = [getScore(PIECE.BLACK), getScore(PIECE.WHITE)];
+									if (b+w === REN*REN*REN) { win(b, w); }
+									else {
+										const next = (piece === PIECE.WHITE)?PIECE.BLACK:PIECE.WHITE;
+										if (isPass(next)) {
+											if (isPass(piece)) {
+												win(getScore(PIECE.BLACK), getScore(PIECE.WHITE));
+											}
+											else {
+												doPass(next);
+												setTimeout(() => setTurn(piece), 1);
+												_animation = null;
+											}
+										}
+										else {
+											setTimeout(changeTurn, 1);
+											_animation = null;
+										}
+									}
+								}
+								else {
+									_animation.counter = TIME.REVERSE;
+								}
+							}
+						}
+						break;
+						
+						case 'END': {
+							_animation = null;
+							setTimeout(endGame, 1);
+						}
+						break;
+					}
+				}
+				renderer.setSize(window.innerWidth, window.innerHeight);
+				renderer.render(scene, camera);
+			}
+			
+			function setParameter() {
+				const params = new URLSearchParams(window.location.search);
+				let tmp = Number(params.get('speed'));
+				if (Number.isNaN(tmp) || tmp < 1) { tmp = 60; }
+				TIME.SET = tmp;
+				TIME.REVERSE = Math.max(Math.floor(tmp/3), 1);
+				TIME.TELOP = (TIME.SET === 1)?'superrun':'run';
+			}
+			
+			setParameter();
+			initField();
+			setupPieces();
+			animate();
+			
+		</script>
+	</body>
+</html>
