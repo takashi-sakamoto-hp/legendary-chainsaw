@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4x4x4 3D 四目並べ</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="ui">
+    <h1>4×4×4 3D 四目並べ</h1>
+    <p id="status">あなたの番（黒）— 列をダブルクリックで玉を落とす</p>
+    <p class="hint">マウスドラッグ: 回転 / ホイール: ズーム / 列をダブルクリック: 玉を落とす</p>
+    <button id="reset-btn" type="button">新しいゲーム</button>
+  </div>
+  <div id="canvas-container"></div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
