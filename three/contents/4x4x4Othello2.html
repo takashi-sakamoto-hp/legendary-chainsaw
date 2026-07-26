@@ -74,7 +74,6 @@
 
 			const REN = 4;
 			const PIECE = {NONE: 'NONE', BLACK: 'BLACK', WHITE: 'WHITE', ERROR: 'ERROR'};
-			const LINE	= {NONE: 'NONE', X: 'X', Y: 'Y', Z: 'Z', XY1: 'XY1', XY2: 'XY2', XZ1: 'XZ1', XZ2: 'XZ2', YZ1: 'YZ1', YZ2: 'YZ2', XYZ1: 'XYZ1', XYZ2: 'XYZ2', XYZ3: 'XYZ3', XYZ4: 'XYZ4'};
 			const TIME = {SET: 60, REVERSE: 20, TELOP: 'run'};
 			const DIRECTION = [];
 			
@@ -475,7 +474,6 @@
 			camera.layers.enable(1);
 			camera.position.set(-0.3, 0.3, 1);
 			const controls = new OrbitControls(camera, renderer.domElement);
-			controls.maxPolarAngle = Math.PI/2+Math.PI/10;
 			controls.target.set(0, 0, 0);
 			controls.update();
 			renderer.render(scene, camera);
