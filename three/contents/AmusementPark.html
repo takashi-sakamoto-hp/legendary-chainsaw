@@ -946,11 +946,10 @@
 			getBaseR() {
 				const rail = new THREE.Group();
 				rail.add(this.getRailPart(this.curve2));
-				const geo1 = super.getGeometry('Cylinder');
-				const rail1 = new THREE.Mesh(geo1, new THREE.MeshStandardMaterial({color: 0xb0b090, metalness: 0.1, roughness: 0.9}));
-				rail1.scale.set(1.3, 0.1, 1.3);
-				rail1.position.y -= 0.09;
-				rail.add(rail1);
+				const base = new THREE.Mesh(super.getGeometry('Cylinder'), new THREE.MeshStandardMaterial({color: 0xb0b090, metalness: 0.1, roughness: 0.9}));
+				base.scale.set(1.3, 0.1, 1.3);
+				base.position.y -= 0.09;
+				rail.add(base);
 				return rail;
 			}
 			locateCars() {
@@ -974,7 +973,7 @@
 				this.train = new THREE.Group();
 				this.curve = super.getCurveXZ('M-26,0 C-26,-5 -20,-8 -17,-8 C-11,-8 -4,-4 -1,-1 L1,1 C4,4 11,8 17,8 C20,8 26,5 26,0 C26,-5 20,-8 17,-8 C11,-8 4,-4 1,-1 L-1,1 C-4,4 -11,8 -17,8 C-20,8 -26,5 -26,0');
 				this.curve1 = super.getCurveXZ('M-1,1 C-4,4 -11,8 -17,8 C-20,8 -26,5 -26,0 C-26,-5 -20,-8 -17,-8 C-11,-8 -4,-4 -1,-1');
-				this.curve2 = super.getCurveXZ('M-0.9,-0.9 L0.9,0.9');
+				this.curve2 = super.getCurveXZ('M-0.95,-0.95 L0.95,0.95');
 				this.curve3 = super.getCurveXZ('M1,1 C4,4 11,8 17,8 C20,8 26,5 26,0 C26,-5 20,-8 17,-8 C11,-8 4,-4 1,-1');
 				this.train.add(this.getBase());
 				this.baseR = this.getBaseR();
@@ -1003,6 +1002,21 @@
 		}
 
 		class Symbol extends Attraction {
+			updateClockCanvas() {
+				const now = new Date();
+				const hours = String(now.getHours()).padStart(2, '0');
+				const minutes = String(now.getMinutes()).padStart(2, '0');
+				const seconds = String(now.getSeconds()).padStart(2, '0');
+				const timeString = `${hours}:${minutes}:${seconds}`;
+				const ctx = this.clockCanvas.getContext('2d');
+				ctx.fillStyle = '#202020';
+				ctx.fillRect(0, 0, this.clockCanvas.width, this.clockCanvas.height);
+				ctx.fillStyle = '#00ffcc';
+				ctx.font = 'Bold 110px monospace';
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'middle';
+				ctx.fillText(timeString, this.clockCanvas.width/2, this.clockCanvas.height/2);
+			}
 			constructor(texture) {
 				super();
 				this.symbol = new THREE.Group();
@@ -1011,15 +1025,31 @@
 				const cylinder = new THREE.Mesh(super.getGeometry('Cylinder'), [super.getMaterial('White'), mSide1, mSide2]);
 				cylinder.scale.set(5, 1, 5);
 				cylinder.rotation.x = Math.PI/2;
+				
+				this.clockCanvas = document.createElement('canvas');
+				this.clockCanvas.width = 512;
+				this.clockCanvas.height = 256;
+				this.clockTexture = new THREE.CanvasTexture(this.clockCanvas);
+				const box = super.getGeometry('Box');
+				const cSide1 = new THREE.MeshStandardMaterial({roughness: 0.5, emissive:0x222222, map: this.clockTexture});
+				const cSide2 = super.getMaterial('MetalBlack');
+				const clockBoard = new THREE.Mesh(box, [cSide2, cSide2, cSide2, cSide2, cSide1, cSide1]);
+				clockBoard.scale.set(7, 2.5, 0.9);
+				clockBoard.position.y = -6.5;
+				
 				const pole = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('LiteYellow'));
 				pole.scale.set(0.4, 25, 0.4);
 				pole.position.y = -13;
-				this.symbol.add(pole, cylinder);
+				this.symbol.add(pole, cylinder, clockBoard);
 				this.symbol.scale.set(0.15, 0.15, 0.15);
 			}
 			getObject() { return this.symbol; }
 			getCamera() { return null; }
-			animate(speed) { this.symbol.rotation.y += 0.001*speed; }
+			animate(speed) {
+				this.symbol.rotation.y += 0.001*speed;
+				this.updateClockCanvas();
+				this.clockTexture.needsUpdate = true;
+			}
 		}
 
 		class Fountain extends Attraction {
@@ -1480,8 +1510,8 @@
 			});
 		}
 		
-		const cameraFix = new THREE.PerspectiveCamera(75, getWidth()/getHeight(), 0.01, 1000);
-		cameraFix.position.set(0, 5, 20);
+		const cameraFix = new THREE.PerspectiveCamera(60, getWidth()/getHeight(), 0.01, 1000);
+		cameraFix.position.set(0, 4, 22);
 		const renderer = new THREE.WebGLRenderer();
 		renderer.setSize(getWidth(), getHeight());
 		renderer.setClearColor(0xd0a050);
