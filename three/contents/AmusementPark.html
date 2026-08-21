@@ -504,19 +504,20 @@
 			getChair(material) {
 				const mesh = new THREE.Group();
 				const m1 = new THREE.Mesh(super.getGeometry('Box'), material);
-				m1.scale.set(0.35, 0.9, 0.35);
+				m1.scale.set(0.35, 1.2, 0.35);
 				mesh.add(m1);
 				return mesh;
 			}
 			getGondra(material) {
 				const mesh = new THREE.Group();
 				const frontPanel = this.getPanel(material);
-				frontPanel.position.set(0, 0.5, 0.9);
+				frontPanel.position.set(0, 0.6, 0.9);
 				mesh.add(frontPanel);
 				const rearPanel = this.getPanel(material);
-				rearPanel.position.set(0, -0.5, 0.9);
+				rearPanel.position.set(0, -0.6, 0.9);
 				mesh.add(rearPanel);
 				const floor = this.getFloor(material);
+				floor.scale.set(1,1.33,1);
 				floor.position.set(0, 0, 0.95);
 				mesh.add(floor);
 				const chair1 = this.getChair(super.getMaterial('LiteGray'));
@@ -526,7 +527,7 @@
 				chair2.position.set(-0.45, 0, 1.4);
 				mesh.add(chair2);
 				const pillar = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('MetalBlack'));
-				pillar.scale.set(0.06, 1.5, 0.06);
+				pillar.scale.set(0.05, 1.4, 0.05);
 				mesh.add(pillar);
 				mesh.rotation.x = Math.PI/2;
 				return mesh;
@@ -534,15 +535,15 @@
 			getPillar(length) {
 				const mesh = new THREE.Group();
 				const edge1 = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('LiteGray'));
-				edge1.scale.set(0.15, 0.15, 0.15);
+				edge1.scale.set(0.09, 0.09, 0.09);
 				edge1.rotation.x = Math.PI/2;
 				mesh.add(edge1);
 				const spoke = new THREE.Mesh(super.getGeometry('Box'), super.getMaterial('LiteGray'));
-				spoke.scale.set(length, 0.3, 0.15);
+				spoke.scale.set(length, 0.08, 0.08);
 				spoke.position.x = length/2;
 				mesh.add(spoke);
 				const edge2 = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('LiteGray'));
-				edge2.scale.set(0.15, 0.15, 0.15);
+				edge2.scale.set(0.09, 0.09, 0.09);
 				edge2.rotation.x = Math.PI/2;
 				edge2.position.x = length;
 				mesh.add(edge2);
@@ -576,12 +577,12 @@
 					pillar4.rotation.z = theta3;
 					pillar4.position.set(x, y, -0.7);
 					mesh.add(pillar4);
-					
-					const center = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('MetalBlack'));
-					center.scale.set(0.18, 2.2, 0.18);
-					center.rotation.set(Math.PI/2, 0, 0);
-					mesh.add(center);
 				}
+				const center = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('MetalBlack'));
+				center.scale.set(0.15, 2.2, 0.15);
+				center.rotation.set(Math.PI/2, 0, 0);
+				mesh.add(center);
+				
 				return mesh;
 			}
 			getCap() {
@@ -634,6 +635,7 @@
 				base.scale.set(len+1, 0.5, 6);
 				base.position.y = -(len-1.2);
 				mesh.add(base);
+
 				return mesh;
 			}
 			constructor() {
