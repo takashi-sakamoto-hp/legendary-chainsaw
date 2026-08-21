@@ -446,6 +446,7 @@
 				this.setMaterial('Merry4',		new THREE.MeshStandardMaterial({color: 0x406060, emissive: 0x103030, metalness: 0.1, roughness: 0.5, transparent: true, opacity: 0.9}));
 				this.setMaterial('Coffee1', 	new THREE.MeshStandardMaterial({color: 0x808060, emissive: 0x303020, metalness: 0.1, roughness: 0.8}));
 
+				this.setMaterial('WoodYellow',	new THREE.MeshStandardMaterial({color: 0xb0b060, emissive: 0x505000, metalness: 0.1, roughness: 0.7}));
 			}
 			getObject() { throw new Error('getObject() must be implemented in sub-class'); }
 			getCamera() { throw new Error('getCamera() must be implemented in sub-class'); }
@@ -500,17 +501,33 @@
 				mesh.add(new THREE.Mesh(this.getFloorGeometry(), material), cap1, cap2);
 				return mesh;
 			}
-			getGondra(material) {
-				const frontPanel = this.getPanel(material);
-				frontPanel.position.set(0, 0.5, 0.85);
-				const rearPanel = this.getPanel(material);
-				rearPanel.position.set(0, -0.5, 0.85);
-				const floor = this.getFloor(material);
-				floor.position.set(0, 0, 0.85);
+			getChair(material) {
 				const mesh = new THREE.Group();
+				const m1 = new THREE.Mesh(super.getGeometry('Box'), material);
+				m1.scale.set(0.35, 0.9, 0.35);
+				mesh.add(m1);
+				return mesh;
+			}
+			getGondra(material) {
+				const mesh = new THREE.Group();
+				const frontPanel = this.getPanel(material);
+				frontPanel.position.set(0, 0.5, 0.9);
+				mesh.add(frontPanel);
+				const rearPanel = this.getPanel(material);
+				rearPanel.position.set(0, -0.5, 0.9);
+				mesh.add(rearPanel);
+				const floor = this.getFloor(material);
+				floor.position.set(0, 0, 0.95);
+				mesh.add(floor);
+				const chair1 = this.getChair(super.getMaterial('LiteGray'));
+				chair1.position.set(0.45, 0, 1.4);
+				mesh.add(chair1);
+				const chair2 = this.getChair(super.getMaterial('LiteGray'));
+				chair2.position.set(-0.45, 0, 1.4);
+				mesh.add(chair2);
 				const pillar = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('MetalBlack'));
 				pillar.scale.set(0.06, 1.5, 0.06);
-				mesh.add(frontPanel, rearPanel, floor, pillar);
+				mesh.add(pillar);
 				mesh.rotation.x = Math.PI/2;
 				return mesh;
 			}
@@ -1012,7 +1029,7 @@
 				ctx.fillStyle = '#202020';
 				ctx.fillRect(0, 0, this.clockCanvas.width, this.clockCanvas.height);
 				ctx.fillStyle = '#00ffcc';
-				ctx.font = 'Bold 110px monospace';
+				ctx.font = 'Bold 60px monospace';
 				ctx.textAlign = 'center';
 				ctx.textBaseline = 'middle';
 				ctx.fillText(timeString, this.clockCanvas.width/2, this.clockCanvas.height/2);
@@ -1020,15 +1037,16 @@
 			constructor(texture) {
 				super();
 				this.symbol = new THREE.Group();
+				
 				const mSide1 = new THREE.MeshStandardMaterial({roughness: 0.5, emissive:0x222222, map: texture});
 				const mSide2 = new THREE.MeshStandardMaterial({roughness: 0.5, emissive:0x222222, map: texture});
-				const cylinder = new THREE.Mesh(super.getGeometry('Cylinder'), [super.getMaterial('White'), mSide1, mSide2]);
-				cylinder.scale.set(5, 1, 5);
-				cylinder.rotation.x = Math.PI/2;
+				const logoBoard = new THREE.Mesh(super.getGeometry('Cylinder'), [super.getMaterial('White'), mSide1, mSide2]);
+				logoBoard.scale.set(5, 1, 5);
+				logoBoard.rotation.x = Math.PI/2;
 				
 				this.clockCanvas = document.createElement('canvas');
-				this.clockCanvas.width = 512;
-				this.clockCanvas.height = 256;
+				this.clockCanvas.width = 256;
+				this.clockCanvas.height = 128;
 				this.clockTexture = new THREE.CanvasTexture(this.clockCanvas);
 				const box = super.getGeometry('Box');
 				const cSide1 = new THREE.MeshStandardMaterial({roughness: 0.5, emissive:0x222222, map: this.clockTexture});
@@ -1040,7 +1058,7 @@
 				const pole = new THREE.Mesh(super.getGeometry('Cylinder'), super.getMaterial('LiteYellow'));
 				pole.scale.set(0.4, 25, 0.4);
 				pole.position.y = -13;
-				this.symbol.add(pole, cylinder, clockBoard);
+				this.symbol.add(pole, logoBoard, clockBoard);
 				this.symbol.scale.set(0.15, 0.15, 0.15);
 			}
 			getObject() { return this.symbol; }
@@ -1281,7 +1299,7 @@
 					[ 1.65, 0, 0,	0, 2.0,	 4.3]
 				];
 				boards.forEach((p) => {
-					const board = new THREE.Mesh(super.getGeometry('Box'), super.getMaterial('Yellow'));
+					const board = new THREE.Mesh(super.getGeometry('Box'), super.getMaterial('WoodYellow'));
 					board.scale.set(16, 0.8, 0.2);
 					board.rotation.set(p[0], p[1], p[2]);
 					board.position.set(p[3], p[4], p[5]);
