@@ -35,6 +35,7 @@
 				<tr><td colspan="2" style="text-align: left;"><button id="bDefault" style="margin-left: 15px;">デフォルト版</button></td></tr>
 				<tr><td colspan="2" style="text-align: left;"><button id="bNoNaphtha" style="margin-left: 15px;">ナフサ不足対応版</button></td></tr>
 				<tr><td colspan="2" style="text-align: left;"><button id="bZ" style="margin-left: 15px;">マジンガーZ風</button></td></tr>
+				<tr><td colspan="2" style="text-align: left;"><button id="bChar" style="margin-left: 15px;">シャア専用</button></td></tr>
 			</table>
 		</div>
 		</div>
@@ -895,8 +896,37 @@
 				});
 			});
 
-			const bChar			= document.getElementById('bChar');
-			const bGundam		= document.getElementById('bGundam');
+			document.getElementById('bChar').addEventListener('click', () => {
+				const data = JSON.parse(`
+[
+	{"id": "Shoulder",		"color": "#ff0000",     "metalness": 0.6,     "roughness": 0.4},
+	{"id": "Rocket",		"color": "#606060",     "metalness": 0.7,     "roughness": 0.2},
+	{"id": "Bangle1",		"color": "#606060",     "metalness": 0.6,     "roughness": 0.4},
+	{"id": "Bangle2",		"color": "#ffff00",     "metalness": 0.5,     "roughness": 0.4},
+	{"id": "RocketBelt",	"color": "#606060",     "metalness": 0.5,     "roughness": 0.5},
+	{"id": "Epron",			"color": "#ff0000",     "metalness": 0.7,     "roughness": 0.2},
+	{"id": "HipBelt",		"color": "#ff0000",     "metalness": 0.7,     "roughness": 0.7},
+	{"id": "Body",			"color": "#ff0000",     "metalness": 0.7,     "roughness": 0.1},
+	{"id": "Eye",			"color": "#202020",     "metalness": 0.3,     "roughness": 0.5},
+	{"id": "Face",			"color": "#ff0000",     "metalness": 0.6,     "roughness": 0.5},
+	{"id": "Mask",			"color": "#ff0000",     "metalness": 0.7,     "roughness": 0.2},
+	{"id": "Visor",			"color": "#ff0000",     "metalness": 0.8,     "roughness": 0.1},
+	{"id": "Nose",			"color": "#ff0000",     "metalness": 0.6,     "roughness": 0.5},
+	{"id": "Tosaka",		"color": "#ff0000",     "metalness": 0.8,     "roughness": 0.2},
+	{"id": "Joint1",		"color": "#ff0000",     "metalness": 0.7,     "roughness": 0.5},
+	{"id": "Joint2",		"color": "#ff0000",     "metalness": 0.7,     "roughness": 0.5},
+	{"id": "Jabara",		"color": "#606060",     "metalness": 0.1,     "roughness": 0.8},
+	{"id": "Hand1",			"color": "#ff0000",     "metalness": 0.8,     "roughness": 0.2},
+	{"id": "Hand2",			"color": "#606060",     "metalness": 0.1,     "roughness": 0.8},
+	{"id": "ShoeUp",		"color": "#ff0000",     "metalness": 0.8,     "roughness": 0.3},
+	{"id": "ShoeDown",		"color": "#ff0000",     "metalness": 0.8,     "roughness": 0.2}
+]
+				`);
+				data.forEach((datum) => {
+					const material = new THREE.MeshStandardMaterial({color: datum.color, metalness: datum.metalness, roughness: datum.roughness});
+					iron28.setMaterial(datum.id, material);
+				});
+			});
 		</script>
 	</body>
 </html>
