@@ -19,13 +19,31 @@
 		<div id="cover"><h1>よゐこ <span style="font-size: 90%">の</span> ぬりゑ</h1></div>
 		<div id="control">
 			<table>
-				<tr><td colspan="2"><button id="bReset" style="margin-right: 30px;">Reset</button><button id="bSave" style="margin-right: 5px;">Save</button><button id="bLoad">Load</button></td></tr>
-				<tr><td colspan="2">&nbsp;</td></tr>
-				<tr><th>部位</th>		<td><span id="lName"></span></td></tr>
+				<tr>
+					<td colspan="2" style="text-align: right;">
+						<button id="bSave" style="margin-right: 5px;">Save</button>
+						<button id="bLoad">Load</button>
+					</td>
+				</tr>
+				<tr><th>部位</th>	<td><span id="lName"></span></td></tr>
 				<tr><th>色</th>		<td><input type="color" id="iColor"></td></tr>
 				<tr><th>金属度</th>	<td><input type="range" id="iMetalness" min="0.0" max="1.0" step="0.05"></td></tr>
 				<tr><th>平滑度</th>	<td><input type="range" id="iRoughness" min="0.0" max="1.0" step="0.05"></td></tr>
+				<tr><td colspan="2">&nbsp;</td></tr>
+				<tr>
+				<tr><th>サンプル</th><td></td></tr>
+				<tr>
+					<td colspan="2" style="text-align: left;">
+						<button id="bDefault"	style="margin-left: 15px;">デフォルト版</button>
+					</td>
+				</tr>
+				<tr>
+					<td colspan="2" style="text-align: left;">
+						<button id="bNoNaphtha"	style="margin-left: 15px;">ナフサ不足対応版</button>
+					</td>
+				</tr>
 			</table>
+		</div>
 		</div>
 		<div id="canvas" style="width: 100%; height: 100%;"></div>
 		<script type="importmap">
@@ -645,6 +663,13 @@
 					});
 				}
 				getObject() { return this.#object; }
+				getFace(scene) {
+					const texture = new THREE.TextureLoader().load('data:image/jpeg;base64,'
+					+ 'iVBORw0KGgoAAAANSUhEUgAAASwAAACWCAYAAABkW7XSAAAAAXNSR0IB2cksfwAAAARnQU1BAACxjwv8YQUAAAAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAAlwSFlzAAAuIwAALiMBeKU/dgAAAAd0SU1FB+oFDhcpGWpw6NkAAAR1SURBVHja7d1daJV1HMDx3/EcfCvcauoCxbSQbjQwK1GoZoYQOCULal1YN1s0FEFBGkwUYoigzjvxQpRAJymhMNh0MtCLiS8h3aiwsenNxKm4pUw3z9npIrrrBfJle559PtfjPP/nx29fnnM4bJmKihPFAEiACUYACBaAYAGCBSBYAIIFCBaAYAEIFiBYAIIFIFiAYAEIFoBgAYIFIFgAggUIFoBgAQgWIFgAggUgWIBgAQgWgGABggUgWIBgAQgWgGABggUgWACCBQgWgGABCBYgWACCBSBYgGABCBaAYAGCBSBYAIIFCBaAYAEIFiBYAIIFIFiAYAEIFoBgAYIFIFiAYAEkQ260LlxV9UvU1Pw0Lobc1TUvqqsbbRsk9QmrqWlt7N37XYyMZFI/5JaWFTYNkv6W8OTJT6Ox8ftURyufz0V7+4c2DZIerIiI5uaV0dCwKfL5bCoH3NHxXvT3T7NpkIZgRUS0t38Q27b9EMPDE1M34NZWbwchVcH660mkvr4uBgenpGa4t2/PiIsXF9kySFuwIiIuXVoU69fvjL6+GakY7pEjn0ehkLVlkMZgRUT09MyJ2tqd0dn5ZqIHe+/eK9Ha+rENgzQH689f9ldj48aGOH/+3cQOtqlpbSo/kwPB+huPHk2OrVvrorl5ZeKGev9+aSLPDYL1FAqFbOzeXRs7dmyMoaFJiRnqvn3fJuq8IFjP0OnTy2PDhh3R2/vamD/rlStvx5kzH9ksGK/Biojo7Hwjqqv3xLlzS8fsGYeGJsWuXbVRLGZsFoznYEVEDA5Oje3bt8T+/d+MyW/GHzjwdSKeAkGwXpBiMRNHj34WNTWNcf36/DFzro6O9+P48dU2Cp6j7Ny5X21P4sH7+0uitXVFDA9PjIULr0U2OzJqZ+nufj3q6urjyRNfYwBPWP+gUMjG4cNfRHX1nrh69a1ROcOtW+WxZcu2GBycapvAE9Z/GxgoiZaWT+LGjTkxf35PTJv28IVc9+bN2bF5849x926ZTYIXIFNRcaKYphvK5fJRWXkq1q37OUpLB57bdS5ceCcaGjbFgwcv2yIQrKczZcrjWLOmJVatOh2zZt16Zq/7+PHkOHiwKo4dW+3rCyBYz/gGM8VYvPi3qKw8FcuWXYxcrvC/Xiefz0Zb2/I4dOjL1Pw1CRCsMay0dCCWLr0cS5b8GgsWXIuysvv/+vMjIxOiq2tenD27LNraKuLOHZ9VgWCNkpkz78bs2b1RXn4nSkp+j0ymGMViJvr7S6K3tzy6u+fGw4cv2RIYI3Lj+eb7+qZHX990WwAJ4R+pAoIFIFiAYAEIFoBgAYIFIFgAggUIFoBgAQgWIFgAggUgWIBgAQgWgGABggUgWACCBQgWgGABCBYgWACCBSBYgGABCBYgWEYACBaAYAGCBSBYAIIFCBaAYAEIFiBYAIIFIFiAYAEIFoBgAYIFIFgAggUIFoBgAQgWIFgAggUgWIBgAQgWgGABggUgWIBgAQgWgGABggUgWACCBQgWgGABPI0/AAGS/laAvvxKAAAAAElFTkSuQmCC'
+					, () => {
+						scene.add(new THREE.Mesh(this.createFaceGeometry(), new THREE.MeshStandardMaterial({color: 0x6060cf, map: texture})));
+					});
+				}
 			}
 
 			const canvas		= document.querySelector('#canvas');
@@ -675,6 +700,7 @@
 
 			const iron28 = new Iron28();
 			scene.add(iron28.getObject());
+//			iron28.getFace(scene);
 
 			const mirror1 = new Reflector(
 				new THREE.PlaneGeometry(40, 28),
@@ -716,10 +742,17 @@
 			const iColor		= document.getElementById('iColor');
 			const iMetalness	= document.getElementById('iMetalness');
 			const iRoughness	= document.getElementById('iRoughness');
-			const bApply		= document.getElementById('bApply');
-			const bReset		= document.getElementById('bReset');
+
+//			const bReset		= document.getElementById('bReset');
 			const bSave			= document.getElementById('bSave');
 			const bLoad			= document.getElementById('bLoad');
+			
+			const bDefault		= document.getElementById('bDefault');
+			const bZ			= document.getElementById('bZ');
+			const bNoNaphtha	= document.getElementById('bNoNaphtha');
+			const bChar			= document.getElementById('bChar');
+			const bGundam		= document.getElementById('bGundam');
+			
 			const materials		= [
 				'Shoulder',	'Rocket',	'Bangle1',	'Bangle2',	'RocketBelt',	'Epron',	'HipBelt',	'Body',
 				'Eye',		'Face',		'Mask',		'Visor',	'Nose',			'Tosaka',
@@ -740,8 +773,9 @@
 				const intersects = raycaster.intersectObjects(scene.children, true);
 				if (intersects.length > 0) {
 					const hit = intersects[0].object;
-					if (hit.material.name != null && hit.material.name.length > 0) {
-						lName.textContent	= hit.material.name;
+					const name = hit.material.name;
+					if (name != null && name.length > 0 && name !== 'ReflectorShader') {
+						lName.textContent	= name;
 						iColor.value		= '#' + hit.material.color.getHexString();
 						iMetalness.value	= hit.material.metalness;
 						iRoughness.value	= hit.material.roughness;
@@ -757,7 +791,7 @@
 			iMetalness	.addEventListener('input', changeMaterial);
 			iRoughness	.addEventListener('input', changeMaterial);
 			
-			bReset.addEventListener('click', () => iron28.resetMaterial());
+//			bReset.addEventListener('click', () => iron28.resetMaterial());
 			bSave .addEventListener('click', async () => {
 				const data = [];
 				materials.forEach((id) => {
@@ -779,6 +813,167 @@
 					iron28.setMaterial(datum.id, material);
 				});
 			});
+			bDefault.addEventListener('click', () => {
+				const data = JSON.parse(`
+[
+  {"id": "Shoulder",	"color": "#202020",	"metalness": 0.6,	"roughness": 0.4},
+  {"id": "Rocket",		"color": "#202020",	"metalness": 0.6,	"roughness": 0.4},
+  {"id": "Bangle1",		"color": "#202020",	"metalness": 0.6,	"roughness": 0.4},
+  {"id": "Bangle2",		"color": "#ffff00",	"metalness": 0.5,	"roughness": 0.4},
+  {"id": "RocketBelt",	"color": "#0bb080",	"metalness": 0.1,	"roughness": 0.8},
+  {"id": "Epron",		"color": "#5050bf",	"metalness": 0.6,	"roughness": 0.5},
+  {"id": "HipBelt",		"color": "#ff0000",	"metalness": 0.6,	"roughness": 0.5},
+  {"id": "Body",		"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
+  {"id": "Eye",			"color": "#ffff00",	"metalness": 0.5,	"roughness": 0.4},
+  {"id": "Mask",		"color": "#5050bf",	"metalness": 0.6,	"roughness": 0.5},
+  {"id": "Visor",		"color": "#5050bf",	"metalness": 0.6,	"roughness": 0.5},
+  {"id": "Nose",		"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
+  {"id": "Tosaka",		"color": "#5050bf",	"metalness": 0.6,	"roughness": 0.5},
+  {"id": "Joint",		"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
+  {"id": "Jabara",		"color": "#e0e0ef",	"metalness": 0.1,	"roughness": 0.8},
+  {"id": "Hand1",		"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
+  {"id": "Hand2",		"color": "#e0e0ef",	"metalness": 0.1,	"roughness": 0.8},
+  {"id": "ShoeUp",		"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
+  {"id": "ShoeDown",	"color": "#ff0000",	"metalness": 0.6,	"roughness": 0.5}
+]				
+				`);
+				data.forEach((datum) => {
+					const material = new THREE.MeshStandardMaterial({color: datum.color, metalness: datum.metalness, roughness: datum.roughness});
+					iron28.setMaterial(datum.id, material);
+				});
+			});
+
+			bNoNaphtha.addEventListener('click', () => {
+				const data = JSON.parse(`
+[
+  {
+    "id": "Shoulder",
+    "color": "#202020",
+    "metalness": 0.6,
+    "roughness": 0.4
+  },
+  {
+    "id": "Rocket",
+    "color": "#202020",
+    "metalness": 0.6,
+    "roughness": 0.4
+  },
+  {
+    "id": "Bangle1",
+    "color": "#202020",
+    "metalness": 0.6,
+    "roughness": 0.4
+  },
+  {
+    "id": "Bangle2",
+    "color": "#ebebeb",
+    "metalness": "0.75",
+    "roughness": "0.35"
+  },
+  {
+    "id": "RocketBelt",
+    "color": "#cccccc",
+    "metalness": "0.5",
+    "roughness": "0.3"
+  },
+  {
+    "id": "Epron",
+    "color": "#c4c4c4",
+    "metalness": "0.8",
+    "roughness": "0.35"
+  },
+  {
+    "id": "HipBelt",
+    "color": "#bbb9b9",
+    "metalness": "0.6",
+    "roughness": "0.2"
+  },
+  {
+    "id": "Body",
+    "color": "#dedede",
+    "metalness": "0.65",
+    "roughness": "0.35"
+  },
+  {
+    "id": "Eye",
+    "color": "#dedede",
+    "metalness": "0.85",
+    "roughness": "0.05"
+  },
+  {
+    "id": "Face",
+    "color": "#919191",
+    "metalness": "0.75",
+    "roughness": "0.5"
+  },
+  {
+    "id": "Mask",
+    "color": "#bababa",
+    "metalness": "0.65",
+    "roughness": "0.5"
+  },
+  {
+    "id": "Visor",
+    "color": "#adadad",
+    "metalness": "0.75",
+    "roughness": "0.45"
+  },
+  {
+    "id": "Nose",
+    "color": "#808080",
+    "metalness": "0.65",
+    "roughness": "0.25"
+  },
+  {
+    "id": "Tosaka",
+    "color": "#d1d1d1",
+    "metalness": "0.75",
+    "roughness": "0.3"
+  },
+  {
+    "id": "Joint",
+    "color": "#bfbfbf",
+    "metalness": "0.65",
+    "roughness": "0.15"
+  },
+  {
+    "id": "Jabara",
+    "color": "#e0e0ef",
+    "metalness": "0.75",
+    "roughness": "0.4"
+  },
+  {
+    "id": "Hand1",
+    "color": "#969696",
+    "metalness": "0.75",
+    "roughness": "0.3"
+  },
+  {
+    "id": "Hand2",
+    "color": "#e0e0ef",
+    "metalness": "0.75",
+    "roughness": "0.15"
+  },
+  {
+    "id": "ShoeUp",
+    "color": "#c2c2c2",
+    "metalness": "0.6",
+    "roughness": "0.5"
+  },
+  {
+    "id": "ShoeDown",
+    "color": "#969696",
+    "metalness": "0.75",
+    "roughness": "0.5"
+  }
+]
+				`);
+				data.forEach((datum) => {
+					const material = new THREE.MeshStandardMaterial({color: datum.color, metalness: datum.metalness, roughness: datum.roughness});
+					iron28.setMaterial(datum.id, material);
+				});
+			});
+
 		</script>
 	</body>
 </html>
