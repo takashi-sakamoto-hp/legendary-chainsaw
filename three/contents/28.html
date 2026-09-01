@@ -32,16 +32,9 @@
 				<tr><td colspan="2">&nbsp;</td></tr>
 				<tr>
 				<tr><th>サンプル</th><td></td></tr>
-				<tr>
-					<td colspan="2" style="text-align: left;">
-						<button id="bDefault"	style="margin-left: 15px;">デフォルト版</button>
-					</td>
-				</tr>
-				<tr>
-					<td colspan="2" style="text-align: left;">
-						<button id="bNoNaphtha"	style="margin-left: 15px;">ナフサ不足対応版</button>
-					</td>
-				</tr>
+				<tr><td colspan="2" style="text-align: left;"><button id="bDefault" style="margin-left: 15px;">デフォルト版</button></td></tr>
+				<tr><td colspan="2" style="text-align: left;"><button id="bNoNaphtha" style="margin-left: 15px;">ナフサ不足対応版</button></td></tr>
+				<tr><td colspan="2" style="text-align: left;"><button id="bZ" style="margin-left: 15px;">マジンガーZ風</button></td></tr>
 			</table>
 		</div>
 		</div>
@@ -271,23 +264,23 @@
 					return head;
 				}
 
-				createJoint1() {
-					const m1 = new THREE.Mesh(this.getGeometry('Cylinder'), this.getMaterial('Joint'));
+				createJoint1(material) {
+					const m1 = new THREE.Mesh(this.getGeometry('Cylinder'), material);
 					m1.position.set(0,  -0.5, 0);
-					const m2 = new THREE.Mesh(this.getGeometry('Joint1'), this.getMaterial('Joint'));
+					const m2 = new THREE.Mesh(this.getGeometry('Joint1'), material);
 					m2.position.set(0, -1.05, 0);
-					const m3 = new THREE.Mesh(this.getGeometry('Joint1'), this.getMaterial('Joint'));
+					const m3 = new THREE.Mesh(this.getGeometry('Joint1'), material);
 					m3.rotation.z = Math.PI;	m3.position.set(0,  0.05, 0);
 					const leg = new THREE.Group();
 					leg.add(m1, m2, m3);
 					return leg;
 				}
-				createJoint2() {
-					const m1 = new THREE.Mesh(this.getGeometry('Cylinder2'), this.getMaterial('Joint'));
+				createJoint2(material) {
+					const m1 = new THREE.Mesh(this.getGeometry('Cylinder2'), material);
 					m1.position.set(0, -0.5,  0);
-					const m2 = new THREE.Mesh(this.getGeometry('Joint1'), this.getMaterial('Joint'));
+					const m2 = new THREE.Mesh(this.getGeometry('Joint1'), material);
 					m2.scale.set(1.1, 1, 1.1);		m2.position.set(0, -1.05, 0);
-					const m3 = new THREE.Mesh(this.getGeometry('Joint1'), this.getMaterial('Joint'));
+					const m3 = new THREE.Mesh(this.getGeometry('Joint1'), material);
 					m3.rotation.z = Math.PI;		m3.position.set(0,  0.05, 0);
 					const leg = new THREE.Group();
 					leg.add(m1, m2, m3);
@@ -328,11 +321,11 @@
 					return group;
 				}
 				createRightFoot() {
-					const l1 = this.createJoint1();				l1.scale.set(1.5, 3, 1.5);	l1.rotation.set(0, 0, -Math.PI*0.22);
-					const l2 = this.createRightFootJabara();	l2.scale.set(0.8, 0.8, 0.8);
-					l2.rotation.order = 'YZX';	l2.rotation.set(-0.6, -2.1, -0.2);														l2.position.set(-2.5, -3.2, -0.1);
-					const l3 = this.createJoint2();				l3.scale.set(1.5, 4, 1.5);	l3.rotation.set(0.9, 0.2, -Math.PI*0.13);	l3.position.set(-2.5, -3.1, -0.3);
-					const l4 = this.createShoe(); 				l4.scale.set(4,3.5,3);		l4.rotation.set(0, 0.7, 0);					l4.position.set(-4.2, -7.5, -4);
+					const l1 = this.createJoint1(this.getMaterial('Joint1')); l1.scale.set(1.5, 3, 1.5); l1.rotation.set(0, 0, -Math.PI*0.22);
+					const l2 = this.createRightFootJabara(); l2.scale.set(0.8, 0.8, 0.8);
+					l2.rotation.order = 'YZX';	l2.rotation.set(-0.6, -2.1, -0.2); l2.position.set(-2.5, -3.2, -0.1);
+					const l3 = this.createJoint2(this.getMaterial('Joint2')); l3.scale.set(1.5, 4, 1.5); l3.rotation.set(0.9, 0.2, -Math.PI*0.13); l3.position.set(-2.5, -3.1, -0.3);
+					const l4 = this.createShoe(); l4.scale.set(4,3.5,3); l4.rotation.set(0, 0.7, 0); l4.position.set(-4.2, -7.5, -4);
 					const foot = new THREE.Group();
 					foot.add(l1, l2, l3, l4);
 					return foot;
@@ -348,11 +341,11 @@
 					return group;
 				}
 				createLeftFoot() {
-					const l1 = this.createJoint1();			l1.scale.set(1.5, 3, 1.5);	l1.rotation.set(-Math.PI*0.3, 0, 0.7);
+					const l1 = this.createJoint1(this.getMaterial('Joint1')); l1.scale.set(1.5, 3, 1.5); l1.rotation.set(-Math.PI*0.3, 0, 0.7);
 					const l2 = this.createLeftFootJabara();	l2.scale.set(0.8, 0.8, 0.8);
-					l2.rotation.order = 'YZX';	l2.rotation.set(0.6, -Math.PI/2*0.9, 0.2);										l2.position.set(2.6, -1.9, 2.4);
-					const l3 = this.createJoint2();			l3.scale.set(1.5, 4, 1.5);	l3.rotation.set(0, 0, 0.5);				l3.position.set(2.8, -2.1, 2.5);
-					const l4 = this.createShoe();			l4.scale.set(4,3.5,3);		l4.rotation.set(0, 1.5, 0);				l4.position.set(5.5, -7.5, 2);
+					l2.rotation.order = 'YZX';	l2.rotation.set(0.6, -Math.PI/2*0.9, 0.2); l2.position.set(2.6, -1.9, 2.4);
+					const l3 = this.createJoint2(this.getMaterial('Joint2')); l3.scale.set(1.5, 4, 1.5); l3.rotation.set(0, 0, 0.5); l3.position.set(2.8, -2.1, 2.5);
+					const l4 = this.createShoe(); l4.scale.set(4,3.5,3); l4.rotation.set(0, 1.5, 0); l4.position.set(5.5, -7.5, 2);
 					const foot = new THREE.Group();
 					foot.add(l1, l2, l3, l4);
 					return foot;
@@ -439,12 +432,12 @@
 				}
 				createRightArm() {
 					const arm = new THREE.Group();
-					const h1 = this.createJoint1();			h1.scale.set(1.3, 3, 1.3);
-					const h2 = this.createRightArmJabara();	h2.scale.set(0.7, 0.7, 0.7);												h2.position.set(0, -3.7, 0);
+					const h1 = this.createJoint1(this.getMaterial('Joint1')); h1.scale.set(1.3, 3, 1.3);
+					const h2 = this.createRightArmJabara();	h2.scale.set(0.7, 0.7, 0.7); h2.position.set(0, -3.7, 0);
 
-					const h3 = this.createJoint1();			h3.scale.set(1.2, 3.5, 1.2);
-					const h4 = this.createRightHand();		h4.scale.set(0.3, 0.3, 0.3);	h4.rotation.set(-Math.PI, Math.PI*0.7, 0);	h4.position.set(0, -4.8, 0);
-					const h5 = this.createBangle();																						h5.position.set(0, -3.5, 0);
+					const h3 = this.createJoint1(this.getMaterial('Joint2')); h3.scale.set(1.2, 3.5, 1.2);
+					const h4 = this.createRightHand(); h4.scale.set(0.3, 0.3, 0.3); h4.rotation.set(-Math.PI, Math.PI*0.7, 0); h4.position.set(0, -4.8, 0);
+					const h5 = this.createBangle(); h5.position.set(0, -3.5, 0);
 					const g = new THREE.Group();
 					g.add(h3, h4, h5);
 					g.position.set(0, -4, 0);
@@ -484,11 +477,11 @@
 				}
 				createLeftArm() {
 					const arm = new THREE.Group();
-					const h1 = this.createJoint1();			h1.scale.set(1.3, 3, 1.3);
-					const h2 = this.createLeftArmJabara();	h2.scale.set(0.7, 0.7, 0.7);	h2.rotation.set(0,2,-1.7);	h2.position.set(0.4, -3.8, 0.7);
-					const h3 = this.createJoint1();			h3.scale.set(1.2, 3.5, 1.2);
-					const h4 = this.createLeftHand();		h4.scale.set(0.3, 0.3, 0.3);	h4.rotation.set(Math.PI, -1.5, 0);	h4.position.set(0, -4.8, 0);
-					const h5 = this.createBangle();																						h5.position.set(0, -3.5, 0);
+					const h1 = this.createJoint1(this.getMaterial('Joint1')); h1.scale.set(1.3, 3, 1.3);
+					const h2 = this.createLeftArmJabara(); h2.scale.set(0.7, 0.7, 0.7);	h2.rotation.set(0,2,-1.7); h2.position.set(0.4, -3.8, 0.7);
+					const h3 = this.createJoint1(this.getMaterial('Joint2')); h3.scale.set(1.2, 3.5, 1.2);
+					const h4 = this.createLeftHand(); h4.scale.set(0.3, 0.3, 0.3);	h4.rotation.set(Math.PI, -1.5, 0); h4.position.set(0, -4.8, 0);
+					const h5 = this.createBangle(); h5.position.set(0, -3.5, 0);
 					const g = new THREE.Group();
 					g.add(h3, h4, h5);
 					g.rotation.set(0,Math.PI/2*1.3,-Math.PI/2*1.2);
@@ -609,16 +602,16 @@
 				}
 
 				createObject() {
-					const head = this.createHead();													head.rotation.set(0, -0.2, 0);					head.position.set(0, 6.7, 0);
-					const body = this.createBody();																									body.position.set(0, 1, 0);
-					const rFoot = this.createRightFoot();																							rFoot.position.set(-2.5, -5.5, 0);
-					const lFoot = this.createLeftFoot();																							lFoot.position.set( 2.5, -5.5, 0);
-					const rArm = this.createRightArm();												rArm.rotation.set( 0.3, 0.8, -Math.PI*0.7);		rArm.position.set(-4, 4.2, -0.5);
-					const lArm = this.createLeftArm();												lArm.rotation.set(-0.3, 0.6,  Math.PI*0.55);	lArm.position.set(3.5, 4.4, 0.2);
-					const rocket1 = this.createRocket();																							rocket1.position.set(-1.8, 0, -6.4);
-					const rocket2 = this.createRocket();																							rocket2.position.set( 1.8, 0, -6.4);
-					const shoulder1 = this.createShoulder();	shoulder1.scale.set(1.8, 2, 1.8);	shoulder1.rotation.set(0, 0,  1);	shoulder1.position.set(-3.7, 4.1, 0);
-					const shoulder2 = this.createShoulder();	shoulder2.scale.set(1.8, 2, 1.8);	shoulder2.rotation.set(0, 0, -1);	shoulder2.position.set( 3.7, 4.1, 0);
+					const head = this.createHead(); head.rotation.set(0, -0.2, 0); head.position.set(0, 6.7, 0);
+					const body = this.createBody(); body.position.set(0, 1, 0);
+					const rFoot = this.createRightFoot(); rFoot.position.set(-2.5, -5.5, 0);
+					const lFoot = this.createLeftFoot(); lFoot.position.set( 2.5, -5.5, 0);
+					const rArm = this.createRightArm(); rArm.rotation.set( 0.3, 0.8, -Math.PI*0.7); rArm.position.set(-4, 4.2, -0.5);
+					const lArm = this.createLeftArm(); lArm.rotation.set(-0.3, 0.6,  Math.PI*0.55); lArm.position.set(3.5, 4.4, 0.2);
+					const rocket1 = this.createRocket(); rocket1.position.set(-1.8, 0, -5.8);
+					const rocket2 = this.createRocket(); rocket2.position.set( 1.8, 0, -5.8);
+					const shoulder1 = this.createShoulder(); shoulder1.scale.set(1.8, 2, 1.8); shoulder1.rotation.set(0, 0,  1); shoulder1.position.set(-3.7, 4.1, 0);
+					const shoulder2 = this.createShoulder(); shoulder2.scale.set(1.8, 2, 1.8); shoulder2.rotation.set(0, 0, -1); shoulder2.position.set( 3.7, 4.1, 0);
 					const object = new THREE.Group();
 					object.add(head, body, rFoot, lFoot, rArm, lArm, rocket1, rocket2, shoulder1, shoulder2);
 					return object;
@@ -640,7 +633,8 @@
 					this.setMaterial('Nose',		new THREE.MeshStandardMaterial({color: 0x6060cf, metalness: 0.6, roughness: 0.5}));
 					this.setMaterial('Tosaka',		new THREE.MeshStandardMaterial({color: 0x5050bf, metalness: 0.6, roughness: 0.5}));
 
-					this.setMaterial('Joint',		new THREE.MeshStandardMaterial({color: 0x6060cf, metalness: 0.6, roughness: 0.5}));
+					this.setMaterial('Joint1',		new THREE.MeshStandardMaterial({color: 0x6060cf, metalness: 0.6, roughness: 0.5}));
+					this.setMaterial('Joint2',		new THREE.MeshStandardMaterial({color: 0x6060cf, metalness: 0.6, roughness: 0.5}));
 					this.setMaterial('Jabara',		new THREE.MeshStandardMaterial({color: 0xe0e0ef, metalness: 0.1, roughness: 0.8}));
 					this.setMaterial('Hand1',		new THREE.MeshStandardMaterial({color: 0x6060cf, metalness: 0.6, roughness: 0.5}));
 					this.setMaterial('Hand2',		new THREE.MeshStandardMaterial({color: 0xe0e0ef, metalness: 0.1, roughness: 0.8}));
@@ -743,20 +737,13 @@
 			const iMetalness	= document.getElementById('iMetalness');
 			const iRoughness	= document.getElementById('iRoughness');
 
-//			const bReset		= document.getElementById('bReset');
 			const bSave			= document.getElementById('bSave');
 			const bLoad			= document.getElementById('bLoad');
-			
-			const bDefault		= document.getElementById('bDefault');
-			const bZ			= document.getElementById('bZ');
-			const bNoNaphtha	= document.getElementById('bNoNaphtha');
-			const bChar			= document.getElementById('bChar');
-			const bGundam		= document.getElementById('bGundam');
 			
 			const materials		= [
 				'Shoulder',	'Rocket',	'Bangle1',	'Bangle2',	'RocketBelt',	'Epron',	'HipBelt',	'Body',
 				'Eye',		'Face',		'Mask',		'Visor',	'Nose',			'Tosaka',
-				'Joint',	'Jabara',	'Hand1',	'Hand2',	'ShoeUp',		'ShoeDown'
+				'Joint1',	'Joint2',	'Jabara',	'Hand1',	'Hand2',		'ShoeUp',	'ShoeDown'
 			];
 
 			window.addEventListener("resize", () => {
@@ -791,7 +778,6 @@
 			iMetalness	.addEventListener('input', changeMaterial);
 			iRoughness	.addEventListener('input', changeMaterial);
 			
-//			bReset.addEventListener('click', () => iron28.resetMaterial());
 			bSave .addEventListener('click', async () => {
 				const data = [];
 				materials.forEach((id) => {
@@ -813,28 +799,30 @@
 					iron28.setMaterial(datum.id, material);
 				});
 			});
-			bDefault.addEventListener('click', () => {
+			
+			document.getElementById('bDefault').addEventListener('click', () => {
 				const data = JSON.parse(`
 [
-  {"id": "Shoulder",	"color": "#202020",	"metalness": 0.6,	"roughness": 0.4},
-  {"id": "Rocket",		"color": "#202020",	"metalness": 0.6,	"roughness": 0.4},
-  {"id": "Bangle1",		"color": "#202020",	"metalness": 0.6,	"roughness": 0.4},
-  {"id": "Bangle2",		"color": "#ffff00",	"metalness": 0.5,	"roughness": 0.4},
-  {"id": "RocketBelt",	"color": "#0bb080",	"metalness": 0.1,	"roughness": 0.8},
-  {"id": "Epron",		"color": "#5050bf",	"metalness": 0.6,	"roughness": 0.5},
-  {"id": "HipBelt",		"color": "#ff0000",	"metalness": 0.6,	"roughness": 0.5},
-  {"id": "Body",		"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
-  {"id": "Eye",			"color": "#ffff00",	"metalness": 0.5,	"roughness": 0.4},
-  {"id": "Mask",		"color": "#5050bf",	"metalness": 0.6,	"roughness": 0.5},
-  {"id": "Visor",		"color": "#5050bf",	"metalness": 0.6,	"roughness": 0.5},
-  {"id": "Nose",		"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
-  {"id": "Tosaka",		"color": "#5050bf",	"metalness": 0.6,	"roughness": 0.5},
-  {"id": "Joint",		"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
-  {"id": "Jabara",		"color": "#e0e0ef",	"metalness": 0.1,	"roughness": 0.8},
-  {"id": "Hand1",		"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
-  {"id": "Hand2",		"color": "#e0e0ef",	"metalness": 0.1,	"roughness": 0.8},
-  {"id": "ShoeUp",		"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
-  {"id": "ShoeDown",	"color": "#ff0000",	"metalness": 0.6,	"roughness": 0.5}
+	{"id": "Shoulder",		"color": "#202020",	"metalness": 0.6,	"roughness": 0.4},
+	{"id": "Rocket",		"color": "#202020",	"metalness": 0.6,	"roughness": 0.4},
+	{"id": "Bangle1",		"color": "#202020",	"metalness": 0.6,	"roughness": 0.4},
+	{"id": "Bangle2",		"color": "#ffff00",	"metalness": 0.5,	"roughness": 0.4},
+	{"id": "RocketBelt",	"color": "#0bb080",	"metalness": 0.1,	"roughness": 0.8},
+	{"id": "Epron",			"color": "#5050bf",	"metalness": 0.6,	"roughness": 0.5},
+	{"id": "HipBelt",		"color": "#ff0000",	"metalness": 0.6,	"roughness": 0.5},
+	{"id": "Body",			"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
+	{"id": "Eye",			"color": "#ffff00",	"metalness": 0.5,	"roughness": 0.4},
+	{"id": "Mask",			"color": "#5050bf",	"metalness": 0.6,	"roughness": 0.5},
+	{"id": "Visor",			"color": "#5050bf",	"metalness": 0.6,	"roughness": 0.5},
+	{"id": "Nose",			"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
+	{"id": "Tosaka",		"color": "#5050bf",	"metalness": 0.6,	"roughness": 0.5},
+	{"id": "Joint1",		"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
+	{"id": "Joint2",		"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
+	{"id": "Jabara",		"color": "#e0e0ef",	"metalness": 0.1,	"roughness": 0.8},
+	{"id": "Hand1",			"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
+	{"id": "Hand2",			"color": "#e0e0ef",	"metalness": 0.1,	"roughness": 0.8},
+	{"id": "ShoeUp",		"color": "#6060cf",	"metalness": 0.6,	"roughness": 0.5},
+	{"id": "ShoeDown",		"color": "#ff0000",	"metalness": 0.6,	"roughness": 0.5}
 ]				
 				`);
 				data.forEach((datum) => {
@@ -843,129 +831,30 @@
 				});
 			});
 
-			bNoNaphtha.addEventListener('click', () => {
+			document.getElementById('bNoNaphtha').addEventListener('click', () => {
 				const data = JSON.parse(`
 [
-  {
-    "id": "Shoulder",
-    "color": "#202020",
-    "metalness": 0.6,
-    "roughness": 0.4
-  },
-  {
-    "id": "Rocket",
-    "color": "#202020",
-    "metalness": 0.6,
-    "roughness": 0.4
-  },
-  {
-    "id": "Bangle1",
-    "color": "#202020",
-    "metalness": 0.6,
-    "roughness": 0.4
-  },
-  {
-    "id": "Bangle2",
-    "color": "#ebebeb",
-    "metalness": "0.75",
-    "roughness": "0.35"
-  },
-  {
-    "id": "RocketBelt",
-    "color": "#cccccc",
-    "metalness": "0.5",
-    "roughness": "0.3"
-  },
-  {
-    "id": "Epron",
-    "color": "#c4c4c4",
-    "metalness": "0.8",
-    "roughness": "0.35"
-  },
-  {
-    "id": "HipBelt",
-    "color": "#bbb9b9",
-    "metalness": "0.6",
-    "roughness": "0.2"
-  },
-  {
-    "id": "Body",
-    "color": "#dedede",
-    "metalness": "0.65",
-    "roughness": "0.35"
-  },
-  {
-    "id": "Eye",
-    "color": "#dedede",
-    "metalness": "0.85",
-    "roughness": "0.05"
-  },
-  {
-    "id": "Face",
-    "color": "#919191",
-    "metalness": "0.75",
-    "roughness": "0.5"
-  },
-  {
-    "id": "Mask",
-    "color": "#bababa",
-    "metalness": "0.65",
-    "roughness": "0.5"
-  },
-  {
-    "id": "Visor",
-    "color": "#adadad",
-    "metalness": "0.75",
-    "roughness": "0.45"
-  },
-  {
-    "id": "Nose",
-    "color": "#808080",
-    "metalness": "0.65",
-    "roughness": "0.25"
-  },
-  {
-    "id": "Tosaka",
-    "color": "#d1d1d1",
-    "metalness": "0.75",
-    "roughness": "0.3"
-  },
-  {
-    "id": "Joint",
-    "color": "#bfbfbf",
-    "metalness": "0.65",
-    "roughness": "0.15"
-  },
-  {
-    "id": "Jabara",
-    "color": "#e0e0ef",
-    "metalness": "0.75",
-    "roughness": "0.4"
-  },
-  {
-    "id": "Hand1",
-    "color": "#969696",
-    "metalness": "0.75",
-    "roughness": "0.3"
-  },
-  {
-    "id": "Hand2",
-    "color": "#e0e0ef",
-    "metalness": "0.75",
-    "roughness": "0.15"
-  },
-  {
-    "id": "ShoeUp",
-    "color": "#c2c2c2",
-    "metalness": "0.6",
-    "roughness": "0.5"
-  },
-  {
-    "id": "ShoeDown",
-    "color": "#969696",
-    "metalness": "0.75",
-    "roughness": "0.5"
-  }
+	{"id": "Shoulder",		"color": "#202020",	"metalness": 0.6,	"roughness": 0.4},
+	{"id": "Rocket",		"color": "#202020",	"metalness": 0.6,	"roughness": 0.4},
+	{"id": "Bangle1",		"color": "#202020",	"metalness": 0.6,	"roughness": 0.4},
+	{"id": "Bangle2",		"color": "#ebebeb",	"metalness": 0.8,	"roughness": 0.3},
+	{"id": "RocketBelt",	"color": "#cccccc",	"metalness": 0.5,	"roughness": 0.3},
+	{"id": "Epron",			"color": "#c4c4c4",	"metalness": 0.8,	"roughness": 0.3},
+	{"id": "HipBelt",		"color": "#bbb9b9",	"metalness": 0.6,	"roughness": 0.2},
+	{"id": "Body",			"color": "#dedede",	"metalness": 0.7,	"roughness": 0.3},
+	{"id": "Eye",			"color": "#dedede",	"metalness": 0.9,	"roughness": 0.1},
+	{"id": "Face",			"color": "#919191",	"metalness": 0.8,	"roughness": 0.5},
+	{"id": "Mask",			"color": "#bababa",	"metalness": 0.7,	"roughness": 0.5},
+	{"id": "Visor",			"color": "#adadad",	"metalness": 0.8,	"roughness": 0.4},
+	{"id": "Nose",			"color": "#808080",	"metalness": 0.7,	"roughness": 0.2},
+	{"id": "Tosaka",		"color": "#d1d1d1",	"metalness": 0.8,	"roughness": 0.3},
+	{"id": "Joint1",		"color": "#bfbfbf",	"metalness": 0.7,	"roughness": 0.1},
+	{"id": "Joint2",		"color": "#bfbfbf",	"metalness": 0.7,	"roughness": 0.1},
+	{"id": "Jabara",		"color": "#e0e0ef",	"metalness": 0.8,	"roughness": 0.4},
+	{"id": "Hand1",			"color": "#969696",	"metalness": 0.8,	"roughness": 0.3},
+	{"id": "Hand2",			"color": "#e0e0ef",	"metalness": 0.8,	"roughness": 0.1},
+	{"id": "ShoeUp",		"color": "#c2c2c2",	"metalness": 0.6,	"roughness": 0.5},
+	{"id": "ShoeDown",		"color": "#969696",	"metalness": 0.8,	"roughness": 0.5}
 ]
 				`);
 				data.forEach((datum) => {
@@ -974,6 +863,40 @@
 				});
 			});
 
+			document.getElementById('bZ').addEventListener('click', () => {
+				const data = JSON.parse(`
+[
+	{"id": "Shoulder",		"color": "#202020",     "metalness": 0.6,     "roughness": 0.4},
+	{"id": "Rocket",		"color": "#f50505",     "metalness": 0.8,     "roughness": 0.2},
+	{"id": "Bangle1",		"color": "#202020",     "metalness": 0.6,     "roughness": 0.4},
+	{"id": "Bangle2",		"color": "#ffff00",     "metalness": 0.5,     "roughness": 0.4},
+	{"id": "RocketBelt",	"color": "#b10b14",     "metalness": 0.5,     "roughness": 0.5},
+	{"id": "Epron",			"color": "#ff0000",     "metalness": 0.7,     "roughness": 0.2},
+	{"id": "HipBelt",		"color": "#ffffff",     "metalness": 0.7,     "roughness": 0.7},
+	{"id": "Body",			"color": "#383838",     "metalness": 0.7,     "roughness": 0.1},
+	{"id": "Eye",			"color": "#ffff00",     "metalness": 0.5,     "roughness": 0.4},
+	{"id": "Face",			"color": "#050505",     "metalness": 0.6,     "roughness": 0.5},
+	{"id": "Mask",			"color": "#f9f9fa",     "metalness": 0.7,     "roughness": 0.2},
+	{"id": "Visor",			"color": "#f4f4f5",     "metalness": 0.8,     "roughness": 0.1},
+	{"id": "Nose",			"color": "#6060cf",     "metalness": 0.6,     "roughness": 0.5},
+	{"id": "Tosaka",		"color": "#f20202",     "metalness": 0.8,     "roughness": 0.2},
+	{"id": "Joint1",		"color": "#ffffff",     "metalness": 0.7,     "roughness": 0.7},
+	{"id": "Joint2",		"color": "#4c4cc2",     "metalness": 0.9,     "roughness": 0.2},
+	{"id": "Jabara",		"color": "#e0e0ef",     "metalness": 0.1,     "roughness": 0.8},
+	{"id": "Hand1",			"color": "#6060cf",     "metalness": 0.8,     "roughness": 0.2},
+	{"id": "Hand2",			"color": "#e0e0ef",     "metalness": 0.1,     "roughness": 0.8},
+	{"id": "ShoeUp",		"color": "#6060cf",     "metalness": 0.8,     "roughness": 0.3},
+	{"id": "ShoeDown",		"color": "#001eff",     "metalness": 0.8,     "roughness": 0.2}
+]
+				`);
+				data.forEach((datum) => {
+					const material = new THREE.MeshStandardMaterial({color: datum.color, metalness: datum.metalness, roughness: datum.roughness});
+					iron28.setMaterial(datum.id, material);
+				});
+			});
+
+			const bChar			= document.getElementById('bChar');
+			const bGundam		= document.getElementById('bGundam');
 		</script>
 	</body>
 </html>
