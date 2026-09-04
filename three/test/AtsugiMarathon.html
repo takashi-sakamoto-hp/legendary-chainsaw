@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta name="Author" content="Sakamoto Takashi">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>厚木マラソン</title>
+		<style>
+		body			{ font-size: 120%; }
+		#control		{ position: absolute; top: 5px; left:   5px; z-index: 1; }
+		#canvas			{ position: absolute; top: 0px; left:   0px; z-index: 0; }
+		button			{ font-size: 90%; margin-left: 15px; }
+		input			{ margin-left: 10px; margin-right: 7px; }
+		#iSpeed			{ width: 100%; }
+		</style>
+		<script type="importmap">
+		{
+		  "imports": {
+			"three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+			"three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+		  }
+		}
+		</script>
+	</head>
+	<body>
+		<div id="control">
+			<span style="display: inline-block; width: 500px;"><input id="iSpeed" type="range" min="0" max="20" step="1" value="0"></span>
+		</div>
+		<div id="canvas" style="width: 100%; height: 100%;"></div>
+		<script type="module">
+		import * as THREE from 'three';
+		import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+		function getCurveXZ(pathStr) {
+			function getVector3(ary, index) { return new THREE.Vector3(Number(ary[index]), 0, Number(ary[index+1])); }
+			let elem = pathStr.match(/[A-Za-z]|-?\d+(\.\d+)?/g);
+			if (elem.length == 0) { throw new Error(); }
+			const curve = new THREE.CurvePath();
+			let index = 0;
+			const ssp = new THREE.Vector3(0, 0, 0);
+			let sp = ssp; 
+			while (index < elem.length) {
+				let token = elem[index++];
+				switch (token) {
+					case 'M': {
+						if (index + 2 > elem.length) { throw new Error(); }
+						sp = getVector3(elem, index);
+						index += 2;
+					}
+					break;
+					
+					case 'L': {
+						if (index + 2 > elem.length) { throw new Error(); }
+						const ep = getVector3(elem, index);
+						curve.add(new THREE.LineCurve3(sp, ep));
+						sp = ep;
+						index += 2;
+					}
+					break;
+						
+					case 'Q': {
+						if (index + 4 > elem.length) { throw new Error(); }
+						const ep = getVector3(elem, index+2);
+						curve.add(new THREE.QuadraticBezierCurve3(sp, getVector3(elem, index), ep));
+						sp = ep;
+						index += 4;
+					}
+					break;
+						
+					case 'C': {
+						if (index + 6 > elem.length) { throw new Error(); }
+						const ep  = getVector3(elem, index+4);
+						curve.add(new THREE.CubicBezierCurve3(sp, getVector3(elem, index), getVector3(elem, index+2), ep));
+						sp = ep;
+						index += 6;
+					}
+					break;
+						
+					case 'Z':
+						curve.add(new THREE.LineCurve3(sp, ssp));
+						break;
+					
+					default:
+						console.log('ignore: ' + token);
+						break;
+				}
+			}
+			return curve;
+		}
+	
+		const canvas = document.querySelector('#canvas');
+		const iSpeed = document.getElementById('iSpeed');
+		function getWidth()  { return canvas.getBoundingClientRect().width; }
+		function getHeight() { return canvas.getBoundingClientRect().height; }
+
+		const COURSE = getCurveXZ('M 115,54 C 122,45 110,40 109,41 C 105,44 98,52 101,56 C 104,61 112,64 117,59 C 122,53 122,48 120,46 C 112,36 107,43 104,42 C 102,42 100,30 99,30 C 96,30 78,39 76,53 C 75,60 75,63 68,70 C 65,73 67,86 64,89 C 63,90 24,115 22,118 C 18,125 23,129 22,133 C 17,152 34,148 37,154 C 39,158 37,161 48,163 C 53,164 60,167 63,167 C 65,167 100,162 115,167 C 133,173 151,181 152,180 C 155,176 151,156 155,152 C 159,148 151,144 167,144 C 176,144 192,147 198,142 C 200,141 210,141 216,141 C 219,141 224,145 226,143 C 232,137 252,148 252,137 C 252,131 234,126 235,122 C 239,104 231,111 231,106 C 231,101 235,101 230,96 C 227,93 202,56 200,51 C 198,46 178,10 176,10 C 168,7 156,20 133,5 C 130,3 120,9 120,10 C 120,13 125,11 125,25 C 125,29 126,35 127,36 C 134,39 150,32 154,29 C 156,28 159,32 156,32 C 153,32 144,37 139,38 C 134,40 127,38 127,39 C 125,42 128,42 122,50 C 121,51 122,55 116,60 C 112,62 110,67 107,70 C 105,73 101,77 97,74 C 95,72 92,67 92,65 C 92,63 97,54 99,54 C 100,54 103,61 107,61 C 119,61 122,48 120,46 C 118,44 115,40 112,40 C 110,40 112,44 108,49 C 105,52 103,56 107,58 C 109,60 112,57 115,53 C 119,48 112,45 111,46 C 110,47 107,51 106,53');
+
+		const UP_DOWN = getCurveXZ('M 0,16 C 2,18 0,16 4,15 C 5,15 6,18 8,16 C 9,15 10,15 14,14 C 15,13 15,10 16,9 C 20,4 21,7 22,10 C 23,12 25,14 26,14 C 27,14 29,18 31,18 C 32,18 32,15 36,17 C 40,19 41,13 43,13 C 44,13 48,16 49,16 C 50,16 50,16 52,16 C 51,16 51.93,16 51.96,16 C 53,16 52,14 53,14 C 54,14 55,20 56,20 C 62,20 63,20 66,17 C 67,16 76,18 79,19 C 80,19 82,18 84,16 C 86,14 88,14 91,15 C 92,15 94,17 95,16 C 96,15 97,15 98.2,16 C 99,17 99,17 100,16');
+		
+		function getRoad() {
+			const g = new THREE.TubeGeometry(COURSE, 1000, 1, 4);
+			const positions = g.attributes.position.array;
+			for (let i = 0; i < positions.length; i += 3) {
+				const theta = Math.PI*2*i/positions.length;
+				const y = positions[i+1];
+				const h = UP_DOWN.getPoint(i/positions.length);
+				positions[i+1] = y/5-h.z*2+30;
+			}
+			
+			const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({color: 0x202020, emissive: 0x404040, metalness: 0.5}));
+			return m;
+		}
+		
+		function setPosition(obj, pos) {
+			const p = COURSE.getPoint(pos);
+			const h = UP_DOWN.getPoint(pos);
+			p.y = -h.z*2+30;
+			obj.position.set(p.x, p.y, p.z);
+		}
+
+		class Person {
+			constructor(material, speed) {
+				this.person = new THREE.Group();
+				const body = new THREE.Mesh(new THREE.CylinderGeometry(1,0,2), material);
+				body.position.y = 1;
+				const head = new THREE.Mesh(new THREE.SphereGeometry(0.5), material);
+				head.position.y = 2.5;
+				this.person.add(body, head);
+				this.speed = speed;
+				this.pos = 0;
+				setPosition(this.person, this.pos);
+			}
+			getObject() { return this.person; }
+			animate() {
+				this.pos += this.speed*Number(iSpeed.value)/5;
+				if (this.pos > 1) { this.pos = 1; }
+				setPosition(this.person, this.pos);
+			}
+		}
+		
+		const scene = new THREE.Scene();
+
+		const directionLight = new THREE.DirectionalLight(0xffffff, 3);
+		directionLight.position.set(1,1,1);
+		scene.add(directionLight);
+		const ambientLight = new THREE.AmbientLight(0x999999, 1);
+		scene.add(ambientLight);
+
+		const road = getRoad();
+		scene.add(road);
+		const persons = [];
+		for (let i = 0; i < 1000; ++i) {
+			const speed = Math.random()*0.0003 + 0.0003;
+			const color = Math.floor(Math.random()*0x1000000);
+			const p = new Person(new THREE.MeshStandardMaterial({color: color}), speed);
+			persons.push(p);
+			scene.add(p.getObject());
+		}
+		const camera = new THREE.PerspectiveCamera(60, getWidth()/getHeight(), 1, 5000);
+		camera.position.set(130, 80, 250);
+		const renderer = new THREE.WebGLRenderer();
+		renderer.setSize(getWidth(), getHeight());
+		renderer.setClearColor(0xa0a0ff);
+		renderer.shadowMap.enabled = true;
+		const controls = new OrbitControls(camera, renderer.domElement);
+		Object.assign(controls, {rotateSpeed: 0.5, enableDamping: true, dampingFactor: 0.05});
+		canvas.appendChild(renderer.domElement);
+		controls.target.set(130, 0, 120);
+		controls.update();
+		
+		function animate() {
+			renderer.setSize(getWidth(), getHeight());
+			persons.forEach((p) => p.animate());
+			renderer.render(scene, camera);
+			requestAnimationFrame(animate);
+		}
+
+		animate();
+		</script>
+	</body>
+</html>
