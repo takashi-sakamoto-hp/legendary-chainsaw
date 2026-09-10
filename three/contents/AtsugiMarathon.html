@@ -192,19 +192,22 @@
 				
 				this.sphere = new THREE.SphereGeometry(1);
 				this.all = new THREE.Group();
-				const head = new THREE.Mesh(new THREE.SphereGeometry(0.18), material);				head.scale.set(0.9,1,0.9);
-				head.position.y = 0.53;
-				const body = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, 0.7), material);	body.scale.set(1,1,0.5);
+				this.head = new THREE.Mesh(new THREE.SphereGeometry(0.18), material);				this.head.scale.set(0.9,1,0.9);
+				this.head.position.y = 0.88;
+				this.body = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, 0.7), material);	this.body.scale.set(1,1,0.5);
+				this.body.position.y = 0.35;
+				this.waist = new THREE.Mesh(new THREE.SphereGeometry(0.30), material);				this.waist.scale.set(1,0.3,0.5);
+				this.waist.position.y = 0;
 				this.armL = this.createArmL(material);
-				this.armL.position.set( 0.4, 0.27, 0);
+				this.armL.position.set( 0.4, 0.62, 0);
 				this.armR = this.createArmR(material);
-				this.armR.position.set(-0.4, 0.27, 0);
+				this.armR.position.set(-0.4, 0.62, 0);
 				this.legL = this.createLegL(material);
-				this.legL.position.set( 0.14, -0.35, 0);
+				this.legL.position.set( 0.14, -0.1, 0);
 				this.legR = this.createLegR(material);
-				this.legR.position.set(-0.14, -0.35, 0);
-				this.all.add(head, body, this.armL, this.armR, this.legL, this.legR);
-				this.all.position.y = 0.95;
+				this.legR.position.set(-0.14, -0.1, 0);
+				this.all.add(this.head, this.body, this.waist, this.armL, this.armR, this.legL, this.legR);
+				this.all.position.y = 0.75;
 				this.person.add(this.all);
 				this.speed = speed;
 				this.pos = 0;
@@ -212,7 +215,7 @@
 			}
 			getObject() { return this.person; }
 			animate() {
-				if (this.pos > 1) { return; }
+				if (this.pos >= 1) { return; }
 				const speed = this.speed*Number(iSpeed.value);
 				if (speed === 0) {
 					this.all.rotation.x = 0;
@@ -222,7 +225,7 @@
 					this.LegR1.rotation.x = 0;
 					this.armL.rotation.x =  0;
 					this.armR.rotation.x =  0;
-					this.legL.rotation.x = 0;
+					this.legL.rotation.x =  0;
 					this.legR.rotation.x =  0;
 					return;
 				}
@@ -231,7 +234,7 @@
 				this.armR1.rotation.x = -Math.PI/2;
 				this.LegL1.rotation.x = 1;
 				this.LegR1.rotation.x = 1;
-				this.pos += speed/20;
+				this.pos = Math.min(this.pos+speed/20, 1);
 				const delta = Math.sin(this.pos*2000*Math.PI);
 				this.armL.rotation.x =  delta;
 				this.armR.rotation.x = -delta;
@@ -296,7 +299,7 @@
 		scene.add(base);
 
 		const persons = [];
-		const NUMBER = 1;
+		const NUMBER = 100;
 		for (let i = 0; i < NUMBER; ++i) {
 			const speed = Math.random()*0.0003 + 0.0003;
 			const color = Math.floor(Math.random()*0x1000000);
