@@ -116,11 +116,12 @@
 		function setPosition(obj, pos) {
 			const p = COURSE.getPoint(pos);
 			const h = UP_DOWN.getPoint(pos);
-			obj.position.set(p.x, (21-h.z)*2+15, p.z);
+			const y = (21-h.z)*2+15;
+			obj.position.set(p.x, y, p.z);
 			
 			const tangent = new THREE.Vector3();
-			const defaultAxis = new THREE.Vector3(0, 0, 1);
 			COURSE.getTangentAt(pos, tangent);
+			const defaultAxis = new THREE.Vector3(0, 0, 1);
 			obj.quaternion.setFromUnitVectors(defaultAxis, tangent);
 		}
 
@@ -187,9 +188,8 @@
 				g.add(m0, m1, this.LegR1);
 				return g;
 			}
-			constructor(material, speed) {
+			constructor(material, speed, stamina) {
 				this.person = new THREE.Group();
-				
 				this.sphere = new THREE.SphereGeometry(1);
 				this.all = new THREE.Group();
 				this.head = new THREE.Mesh(new THREE.SphereGeometry(0.18), material);				this.head.scale.set(0.9,1,0.9);
@@ -209,14 +209,28 @@
 				this.all.add(this.head, this.body, this.waist, this.armL, this.armR, this.legL, this.legR);
 				this.all.position.y = 0.75;
 				this.person.add(this.all);
+
 				this.speed = speed;
+				this.stamina = stamina;
+				this.staminaFull = true;
 				this.pos = 0;
 				setPosition(this.person, this.pos);
 			}
 			getObject() { return this.person; }
 			animate() {
-				if (this.pos >= 1) { return; }
-				const speed = this.speed*Number(iSpeed.value);
+				if (this.pos >= 1) {
+					this.all.rotation.x = 0;
+					this.armL1.rotation.x = 0;
+					this.armR1.rotation.x = 0;
+					this.LegL1.rotation.x = 0;
+					this.LegR1.rotation.x = 0;
+					this.armL.rotation.x =  0;
+					this.armR.rotation.x =  0;
+					this.legL.rotation.x =  0;
+					this.legR.rotation.x =  0;
+					return;
+				}
+				let speed = Math.max(this.speed*Number(iSpeed.value), 0);
 				if (speed === 0) {
 					this.all.rotation.x = 0;
 					this.armL1.rotation.x = 0;
@@ -229,17 +243,45 @@
 					this.legR.rotation.x =  0;
 					return;
 				}
-				this.all.rotation.x = speed*60;
-				this.armL1.rotation.x = -Math.PI/2;
-				this.armR1.rotation.x = -Math.PI/2;
-				this.LegL1.rotation.x = 1;
-				this.LegR1.rotation.x = 1;
-				this.pos = Math.min(this.pos+speed/20, 1);
-				const delta = Math.sin(this.pos*2000*Math.PI);
-				this.armL.rotation.x =  delta;
-				this.armR.rotation.x = -delta;
-				this.legL.rotation.x = -delta;
-				this.legR.rotation.x =  delta;
+				
+				if (this.pos > this.stamina) {
+					this.staminaFull = !this.staminaFull;
+					this.stamina = this.pos + this.stamina * (this.staminaFull?0.8:0.2);
+				}
+				if (this.staminaFull) {
+					const tangent = new THREE.Vector3();
+					UP_DOWN.getTangentAt(this.pos, tangent);
+					const newSpeed = speed*(1+tangent.z/2);
+					speed = Math.min(speed*1.5, Math.max(speed*0.5, newSpeed))/20;
+
+					// 上り坂は遅く、下り坂は速く
+					this.all.rotation.x = speed*1200;
+					this.armL1.rotation.x = -Math.PI/2;
+					this.armR1.rotation.x = -Math.PI/2;
+					this.LegL1.rotation.x = 1;
+					this.LegR1.rotation.x = 1;
+					this.pos = Math.min(this.pos+speed, 1);
+					const delta = Math.sin(this.pos*2000*Math.PI);
+					this.armL.rotation.x =  delta;
+					this.armR.rotation.x = -delta;
+					this.legL.rotation.x = -delta;
+					this.legR.rotation.x =  delta;
+				}
+				else {
+					speed = speed*0.3/20;
+
+					this.all.rotation.x = speed*1200;
+					this.armL1.rotation.x = 0;
+					this.armR1.rotation.x = 0;
+					this.LegL1.rotation.x = 0;
+					this.LegR1.rotation.x = 0;
+					this.pos = Math.min(this.pos+speed, 1);
+					const delta = Math.sin(this.pos*1400*Math.PI)/2;
+					this.armL.rotation.x =  delta;
+					this.armR.rotation.x = -delta;
+					this.legL.rotation.x = -delta;
+					this.legR.rotation.x =  delta;
+				}
 				setPosition(this.person, this.pos);
 			}
 		}
@@ -251,10 +293,48 @@
 		texture_canvas.width = TEXTURE_WIDTH;
 		texture_canvas.height = TEXTURE_HEIGHT;
 		const texture = new THREE.CanvasTexture(texture_canvas);
+		function drawScale(ctx, pos, text) {
+			ctx.beginPath();
+			ctx.strokeStyle = '#ffffff';
+			ctx.lineWidth = 0.5;
+			ctx.moveTo(pos, TEXTURE_HEIGHT/2);
+			ctx.lineTo(pos, TEXTURE_HEIGHT);
+			ctx.stroke();
+			ctx.save();
+			ctx.translate(pos, 330);
+			ctx.rotate(Math.PI);
+			ctx.textAlign = 'center'
+			ctx.fillStyle = '#fff';
+			ctx.font = '14px sans-serif';
+			ctx.fillText(text, 0, 0);
+			ctx.restore();
+		}
+		function drawCp(ctx, pos, text) {
+			ctx.beginPath();
+			ctx.strokeStyle = '#ffff00';
+			ctx.lineWidth = 0.5;
+			ctx.moveTo(pos, 0);
+			ctx.lineTo(pos, TEXTURE_HEIGHT);
+			ctx.stroke();
+			ctx.save();
+			ctx.translate(pos, 360);
+			ctx.rotate(Math.PI);
+			ctx.textAlign = 'center'
+			ctx.fillStyle = '#ff0';
+			ctx.font = '18px sans-serif';
+			ctx.fillText(text, 0, 0);
+			ctx.restore();
+		}
 		function updateCanvas(canvas) {
 			const ctx = canvas.getContext('2d');
 			ctx.fillStyle = '#604020';
 			ctx.fillRect(0, 0, TEXTURE_WIDTH, TEXTURE_HEIGHT);
+
+			for (let i = 1; i < 10; ++i) { drawScale(ctx, i/10*TEXTURE_WIDTH, `${i}km`); }
+			drawCp(ctx, TEXTURE_WIDTH*0.31, 'CP1');
+			drawCp(ctx, TEXTURE_WIDTH*0.64, 'CP2');
+//			ctx.moveTo(0,128);
+//			ctx.lineTo(TEXTURE_WIDTH,128)
 			ctx.font = 'bold 40px sans-serif';
 			ctx.fillStyle = '#000';
 			ctx.fillText('厚木マラソン', 566, 182); 
@@ -262,25 +342,6 @@
 			ctx.fillText('2026年 10月 25日', 890, 187);
 			ctx.font = '12px sans-serif';
 			ctx.fillText('© CoderDojo厚木', 220, 190);
-
-			ctx.beginPath();
-			ctx.strokeStyle = '#ffffff';
-			ctx.lineWidth = 0.5;
-			for (let i = 0; i < 10; ++i) {
-				ctx.moveTo(i*TEXTURE_WIDTH/10, TEXTURE_HEIGHT/2);
-				ctx.lineTo(i*TEXTURE_WIDTH/10, TEXTURE_HEIGHT);
-				ctx.save();
-				ctx.translate(i*TEXTURE_WIDTH/10, 330);
-				ctx.rotate(Math.PI);
-				ctx.textAlign = 'center'
-				ctx.fillStyle = '#fff';
-				ctx.font = '18px sans-serif';
-				ctx.fillText(`${i+1}km`, 0, 0);
-				ctx.restore();
-			}
-//			ctx.moveTo(0,128);
-//			ctx.lineTo(TEXTURE_WIDTH,128)
-			ctx.stroke();
 		}
 		updateCanvas(texture_canvas);
 
@@ -303,7 +364,7 @@
 		for (let i = 0; i < NUMBER; ++i) {
 			const speed = Math.random()*0.0003 + 0.0003;
 			const color = Math.floor(Math.random()*0x1000000);
-			const p = new Person(new THREE.MeshStandardMaterial({color: color}), speed);
+			const p = new Person(new THREE.MeshStandardMaterial({color: color}), speed, Math.min(1, Math.max(Math.random()*1.2, 0.1)));
 //			p.getObject().scale.set(60,60,60);
 			persons.push(p);
 			scene.add(p.getObject());
@@ -321,9 +382,12 @@
 		controls.target.set(130, 20, 120);
 		controls.update();
 		
+		let totalTime = 0;
 		function animate() {
 			renderer.setSize(getWidth(), getHeight());
 			persons.forEach((p) => p.animate());
+			totalTime += Number(iSpeed.value);
+			console.log(totalTime);
 			renderer.render(scene, camera);
 			requestAnimationFrame(animate);
 		}
