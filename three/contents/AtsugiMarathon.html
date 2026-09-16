@@ -7,8 +7,12 @@
 		<title>厚木マラソン</title>
 		<style>
 		body			{ font-size: 120%; }
-		#control		{ position: absolute; top: 5px; left:   5px; z-index: 1; }
-		#canvas			{ position: absolute; top: 0px; left:   0px; z-index: 0; }
+		#control		{ position: absolute; top:   5px; left:    5px; z-index: 10; }
+		#canvas			{ position: absolute; top:   0px; left:    0px; z-index: 0; }
+		#canvasStart	{ position: absolute; top:   5px; right: 265px; z-index: 1; }
+		#canvasGoal		{ position: absolute; top:   5px; right:   5px; z-index: 1; }
+		#canvasCp1		{ position: absolute; top: 135px; right: 265px; z-index: 1; }
+		#canvasCp2		{ position: absolute; top: 135px; right:   5px; z-index: 1; }
 		button			{ font-size: 90%; margin-left: 15px; }
 		input			{ margin-left: 10px; margin-right: 7px; }
 		#iSpeed			{ width: 100%; }
@@ -27,6 +31,7 @@
 			<span style="display: inline-block; width: 500px;"><input id="iSpeed" type="range" min="0" max="20" step="1" value="0"></span>
 		</div>
 		<div id="canvas" style="width: 100%; height: 100%;"></div>
+		<div id="canvasStart"></div><div id="canvasCp1"></div><div id="canvasCp2"></div><div id="canvasGoal"></div>
 		<script type="module">
 		import * as THREE from 'three';
 		import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -151,7 +156,6 @@
 				m1.position.x = 1;
 				const m2 = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 0.9), new THREE.MeshStandardMaterial({color: 0xffffff, side: THREE.DoubleSide, map: new THREE.CanvasTexture(canvas)}));
 				m2.position.y = 1;
-				m2.rotation.y = Math.PI;
 				g.add(m0, m1, m2);
 				const p = this.getPosition(pos);
 				g.position.set(p.x, p.y+1.5, p.z);
@@ -199,6 +203,21 @@
 				const tangent = new THREE.Vector3();
 				this.#COURSE.getTangentAt(pos, tangent);
 				return tangent;
+			}
+
+			getCamera(pos) {
+				const camera = new THREE.PerspectiveCamera(60, 256/128, 0.1, 1000);
+				const lookAt = this.getPosition(pos);
+
+				let diff = lookAt;
+				if (pos+0.001 <= 1) { diff = new THREE.Vector3().subVectors(lookAt, this.getPosition(pos+0.001)); }
+				else				{ diff = new THREE.Vector3().subVectors(this.getPosition(pos-0.001), lookAt); }
+				const cameraPos = new THREE.Vector3(lookAt.x - diff.x*7, lookAt.y - diff.y*7, lookAt.z - diff.z*7);
+				lookAt.y += 0.5;
+				cameraPos.y = lookAt.y+2;
+				camera.position.set(cameraPos.x, cameraPos.y, cameraPos.z);
+				camera.lookAt(lookAt.x, lookAt.y, lookAt.z);
+				return camera;
 			}
 		}
 
@@ -302,70 +321,50 @@
 				this.setPosition(this.person, this.pos);
 			}
 			getObject() { return this.person; }
-
+			
+			walk(delta) {
+				this.armL1.rotation.x = 0;
+				this.armR1.rotation.x = 0;
+				this.LegL1.rotation.x = 0;
+				this.LegR1.rotation.x = 0;
+				this.armL.rotation.x =  delta;
+				this.armR.rotation.x = -delta;
+				this.legL.rotation.x = -delta;
+				this.legR.rotation.x =  delta;
+			}
+			run(delta) {
+				this.armL1.rotation.x = -Math.PI/2;
+				this.armR1.rotation.x = -Math.PI/2;
+				this.LegL1.rotation.x = 1;
+				this.LegR1.rotation.x = 1;
+				this.armL.rotation.x =  delta;
+				this.armR.rotation.x = -delta;
+				this.legL.rotation.x = -delta;
+				this.legR.rotation.x =  delta;
+			}
 			animate() {
-				if (this.pos >= 1) {
-					this.all.rotation.x = 0;
-					this.armL1.rotation.x = 0;
-					this.armR1.rotation.x = 0;
-					this.LegL1.rotation.x = 0;
-					this.LegR1.rotation.x = 0;
-					this.armL.rotation.x =  0;
-					this.armR.rotation.x =  0;
-					this.legL.rotation.x =  0;
-					this.legR.rotation.x =  0;
-					return;
-				}
+				if (this.pos >= 1) { this.walk(0); return; }
 				let speed = Math.max(this.speed*Number(iSpeed.value), 0);
-				if (speed === 0) {
-					this.all.rotation.x = 0;
-					this.armL1.rotation.x = 0;
-					this.armR1.rotation.x = 0;
-					this.LegL1.rotation.x = 0;
-					this.LegR1.rotation.x = 0;
-					this.armL.rotation.x =  0;
-					this.armR.rotation.x =  0;
-					this.legL.rotation.x =  0;
-					this.legR.rotation.x =  0;
-					return;
-				}
+				if (speed === 0) { this.walk(0); return; }
 				
 				if (this.pos > this.stamina) {
 					this.staminaFull = !this.staminaFull;
 					this.stamina = this.pos + this.stamina * (this.staminaFull?0.8:0.2);
 				}
 				if (this.staminaFull) {
+					// 上り坂は遅く、下り坂は速く
 					const tangent = road.getTangent(this.pos);
 					const newSpeed = speed*(1+tangent.z/2);
 					speed = Math.min(speed*1.5, Math.max(speed*0.5, newSpeed))/20;
-
-					// 上り坂は遅く、下り坂は速く
-					this.all.rotation.x = speed*1200;
-					this.armL1.rotation.x = -Math.PI/2;
-					this.armR1.rotation.x = -Math.PI/2;
-					this.LegL1.rotation.x = 1;
-					this.LegR1.rotation.x = 1;
 					this.pos = Math.min(this.pos+speed, 1);
 					const delta = Math.sin(this.pos*2000*Math.PI);
-					this.armL.rotation.x =  delta;
-					this.armR.rotation.x = -delta;
-					this.legL.rotation.x = -delta;
-					this.legR.rotation.x =  delta;
+					this.run(delta);
 				}
 				else {
 					speed = speed*0.3/20;
-
-					this.all.rotation.x = speed*1200;
-					this.armL1.rotation.x = 0;
-					this.armR1.rotation.x = 0;
-					this.LegL1.rotation.x = 0;
-					this.LegR1.rotation.x = 0;
 					this.pos = Math.min(this.pos+speed, 1);
 					const delta = Math.sin(this.pos*1400*Math.PI)/2;
-					this.armL.rotation.x =  delta;
-					this.armR.rotation.x = -delta;
-					this.legL.rotation.x = -delta;
-					this.legR.rotation.x =  delta;
+					this.walk(delta);
 				}
 				this.setPosition(this.person, this.pos);
 			}
@@ -397,25 +396,48 @@
 		}
 		
 		const camera = new THREE.PerspectiveCamera(50, getWidth()/getHeight(), 1, 5000);
-		camera.position.set(130, 80, 400);
+		camera.position.set(130, 100, 360);
 		const renderer = new THREE.WebGLRenderer();
 		renderer.setSize(getWidth(), getHeight());
 		renderer.setClearColor(0xa0a0ff);
+	
+		function getCameraData(id, pos) {
+			const canvas = document.querySelector(id);
+			const renderer = new THREE.WebGLRenderer();
+			renderer.setSize(256, 128);
+			renderer.setClearColor(0xa0a0ee);
+			canvas.appendChild(renderer.domElement);
+			return {camera: road.getCamera(pos), renderer: renderer};
+		}
+		
+		const fixCamera = [];
+		[['#canvasStart', 0], ['#canvasCp1', 0.31], ['#canvasCp2', 0.64], ['#canvasGoal', 1]].forEach(([id, pos]) => {
+			fixCamera.push(getCameraData(id, pos));
+		});
 
 		const controls = new OrbitControls(camera, renderer.domElement);
 		Object.assign(controls, {rotateSpeed: 0.5, enableDamping: true, dampingFactor: 0.05});
 		canvas.appendChild(renderer.domElement);
-		controls.target.set(130, 20, 120);
+		controls.target.set(140, 40, 120);
 		controls.update();
 		
 		function animate() {
 			renderer.setSize(getWidth(), getHeight());
 			persons.forEach((p) => p.animate());
 			renderer.render(scene, camera);
+			fixCamera.forEach((data) => { data.renderer.render(scene, data.camera); });
 			requestAnimationFrame(animate);
 		}
 
 		animate();
+
+		window.addEventListener("resize", () => {
+			camera.aspect = getWidth() / getHeight();
+			camera.updateProjectionMatrix();
+			renderer.setSize(getWidth(), getHeight());
+			renderer.setPixelRatio(window.devicePixelRatio);
+			renderer.render(scene, camera);
+		});
 		</script>
 	</body>
 </html>
