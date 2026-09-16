@@ -432,14 +432,17 @@
 		controls.target.set(140, 40, 120);
 		controls.update();
 		
+		let frameCount = 0;
 		function animate() {
+			++frameCount;
 			renderer.setSize(getWidth(), getHeight());
 			persons.forEach((p) => p.animate());
 			renderer.render(scene, camera);
-			fixCamera.forEach((data) => { data.renderer.render(scene, data.camera); });
+			if (frameCount%2 == 0) { fixCamera.forEach((data) => { data.renderer.render(scene, data.camera); }); }
 			requestAnimationFrame(animate);
 		}
 
+		fixCamera.forEach((data) => { data.renderer.render(scene, data.camera); });
 		animate();
 
 		window.addEventListener("resize", () => {
