@@ -13,6 +13,7 @@
 		#canvasGoal		{ position: absolute; top:   5px; right:   5px; z-index: 1; }
 		#canvasCp1		{ position: absolute; top: 135px; right: 200px; z-index: 1; }
 		#canvasCp2		{ position: absolute; top: 135px; right:   5px; z-index: 1; }
+		#canvasTop		{ position: absolute; top:  35px; left:   15px; z-index: 1; }
 		button			{ font-size: 90%; margin-left: 15px; }
 		input			{ margin-left: 10px; margin-right: 7px; }
 		#iSpeed			{ width: 100%; }
@@ -31,7 +32,7 @@
 			<span style="display: inline-block; width: 500px;"><input id="iSpeed" type="range" min="0" max="20" step="1" value="0"></span>
 		</div>
 		<div id="canvas" style="width: 100%; height: 100%;"></div>
-		<div id="canvasStart"></div><div id="canvasCp1"></div><div id="canvasCp2"></div><div id="canvasGoal"></div>
+		<div id="canvasStart"></div><div id="canvasCp1"></div><div id="canvasCp2"></div><div id="canvasGoal"></div><div id="canvasTop"></div>
 		<script type="module">
 		import * as THREE from 'three';
 		import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -205,19 +206,16 @@
 				return tangent;
 			}
 
-			getCamera(pos) {
-				const camera = new THREE.PerspectiveCamera(55, SUBCAMERA_WIDTH/SUBCAMERA_HEIGHT, 0.1, 1000);
+			moveCamera(camera, pos, distance, offset) {
 				const lookAt = this.getPosition(pos);
-
 				let diff = lookAt;
 				if (pos+0.001 <= 1) { diff = new THREE.Vector3().subVectors(lookAt, this.getPosition(pos+0.001)); }
 				else				{ diff = new THREE.Vector3().subVectors(this.getPosition(pos-0.001), lookAt); }
-				const cameraPos = new THREE.Vector3(lookAt.x - diff.x*5, lookAt.y, lookAt.z - diff.z*5);
+				const cameraPos = new THREE.Vector3(lookAt.x-diff.x*distance.x+offset.x, lookAt.y-diff.y*distance.y+offset.y, lookAt.z-diff.z*distance.z+offset.z);
 				lookAt.y += 1;
-				cameraPos.y = lookAt.y+1.5;
+				cameraPos.y += 1;
 				camera.position.set(cameraPos.x, cameraPos.y, cameraPos.z);
 				camera.lookAt(lookAt.x, lookAt.y, lookAt.z);
-				return camera;
 			}
 		}
 
@@ -232,7 +230,10 @@
 			static #geoLeg_4 = new THREE.CylinderGeometry(0.13, 0.12, 0.36);
 			static #geoHead  = new THREE.SphereGeometry(0.18);
 			static #geoBody  = new THREE.CylinderGeometry(0.30, 0.30, 0.7);
-			static #geoWaist = new THREE.SphereGeometry(0.30)
+			static #geoWaist = new THREE.SphereGeometry(0.30);
+			
+			static #topPos = 0;
+			static getTopPos() { return Person.#topPos; }
 			createArm1(material) {
 				const g = new THREE.Group();
 				const m0 = new THREE.Mesh(Person.#geoArm_0, material);
@@ -331,6 +332,7 @@
 
 				this.staminaFull = true;
 				this.pos = 0;
+				Person.#topPos = 0;
 				this.setPosition(this.person, this.pos);
 			}
 			getObject() { return this.person; }
@@ -380,6 +382,7 @@
 					this.walk(delta);
 				}
 				this.setPosition(this.person, this.pos);
+				Person.#topPos = Math.max(Person.#topPos, this.pos);
 			}
 		}
 
@@ -415,19 +418,27 @@
 		renderer.setSize(getWidth(), getHeight());
 		renderer.setClearColor(0xa0a0ff);
 	
-		function getCameraData(id, pos) {
-			const canvas = document.querySelector(id);
+		const fixCamera = [];
+		[
+			['#canvasStart',	0.001, new THREE.Vector3(5, 0, 5), new THREE.Vector3(0, 1, 0)],
+			['#canvasCp1',		0.310, new THREE.Vector3(5, 0, 5), new THREE.Vector3(0, 0, 0)],
+			['#canvasCp2',		0.640, new THREE.Vector3(5, 0, 5), new THREE.Vector3(0, 2, 0)],
+			['#canvasGoal',		0.999, new THREE.Vector3(5, 0, 5), new THREE.Vector3(0, 1, 0)]
+		].forEach(([id, pos, distance, offset]) => {
 			const renderer = new THREE.WebGLRenderer();
 			renderer.setSize(SUBCAMERA_WIDTH, SUBCAMERA_HEIGHT);
 			renderer.setClearColor(0xa0a0ee);
-			canvas.appendChild(renderer.domElement);
-			return {camera: road.getCamera(pos), renderer: renderer};
-		}
-		
-		const fixCamera = [];
-		[['#canvasStart', 0.001], ['#canvasCp1', 0.310], ['#canvasCp2', 0.640], ['#canvasGoal', 0.999]].forEach(([id, pos]) => {
-			fixCamera.push(getCameraData(id, pos));
+			document.querySelector(id).appendChild(renderer.domElement);
+			const camera = new THREE.PerspectiveCamera(55, SUBCAMERA_WIDTH/SUBCAMERA_HEIGHT, 0.1, 1000);
+			road.moveCamera(camera, pos, distance, offset);
+			fixCamera.push({camera: camera, renderer: renderer});
 		});
+		
+		const topCamera = new THREE.PerspectiveCamera(80, SUBCAMERA_WIDTH/SUBCAMERA_HEIGHT, 0.1, 1000);
+		const topCameraRenderer = new THREE.WebGLRenderer();
+		topCameraRenderer.setSize(SUBCAMERA_WIDTH, SUBCAMERA_HEIGHT);
+		topCameraRenderer.setClearColor(0xa0a0ee);
+		document.querySelector('#canvasTop').appendChild(topCameraRenderer.domElement);
 
 		const controls = new OrbitControls(camera, renderer.domElement);
 		Object.assign(controls, {rotateSpeed: 0.5, enableDamping: true, dampingFactor: 0.05});
@@ -442,10 +453,13 @@
 			persons.forEach((p) => p.animate());
 			renderer.render(scene, camera);
 			if (frameCount%2 == 0) { fixCamera.forEach((data) => { data.renderer.render(scene, data.camera); }); }
+			road.moveCamera(topCamera, Person.getTopPos(), new THREE.Vector3(3.5, 0, 3.5), new THREE.Vector3(0, 1.5, 0));
+			topCameraRenderer.render(scene, topCamera);
 			requestAnimationFrame(animate);
 		}
 
 		fixCamera.forEach((data) => { data.renderer.render(scene, data.camera); });
+		topCameraRenderer.render(scene, topCamera);
 		animate();
 
 		window.addEventListener("resize", () => {
