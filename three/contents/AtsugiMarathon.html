@@ -452,9 +452,14 @@
 			renderer.setSize(getWidth(), getHeight());
 			persons.forEach((p) => p.animate());
 			renderer.render(scene, camera);
-			if (frameCount%2 == 0) { fixCamera.forEach((data) => { data.renderer.render(scene, data.camera); }); }
-			road.moveCamera(topCamera, Person.getTopPos(), new THREE.Vector3(3.5, 0, 3.5), new THREE.Vector3(0, 1.5, 0));
-			topCameraRenderer.render(scene, topCamera);
+			if (frameCount%2 == 0) {
+				fixCamera.forEach((data) => { data.renderer.render(scene, data.camera); });
+			}
+			else {
+				const pos = Math.max(Person.getTopPos()-0.0015, 0);
+				road.moveCamera(topCamera, pos, new THREE.Vector3(3.5, 0, 3.5), new THREE.Vector3(0, 1.5, 0));
+				topCameraRenderer.render(scene, topCamera);
+			}
 			requestAnimationFrame(animate);
 		}
 
