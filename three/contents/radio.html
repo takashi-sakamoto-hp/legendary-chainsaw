@@ -1083,6 +1083,7 @@
 			setScale(scale) { this.scale = scale; }
 			run(no) {
 				this.setIndex(no);
+				this.scale = 0;
 				this.pausing = false;
 			}
 			next() {
@@ -1113,14 +1114,8 @@
 		}
 		
 		class Doll {
-			#data = [
-				{label: 'head'},		{label: 'body'},			{label: 'waist'},
-				{label: 'leftArm'},		{label: 'leftForearm'},		{label: 'leftHand'},
-				{label: 'rightArm'},	{label: 'rightForearm'},	{label: 'rightHand'},
-				{label: 'leftLeg'},		{label: 'leftForeleg'},		{label: 'leftFoot'},
-				{label: 'rightLeg'},	{label: 'rightForeleg'},	{label: 'rightFoot'},
-			];
 			#debug = false;
+
 			createTextureFace() {
 				const canvas = document.createElement('canvas');
 				canvas.width = 512;
@@ -1189,7 +1184,7 @@
 				return texture;
 			}
 			createHead() {
-				const name = 'head';
+				const name = this.NAME_HEAD;
 				const mat = this.skin.clone();
 				mat.map = (this.#debug)?this.createTextureFB():this.createTextureFace();
 
@@ -1212,7 +1207,7 @@
 				return g;
 			}
 			createLeftHand() {
-				const name = 'leftHand';
+				const name = this.NAME_LEFTHAND;
 				
 				const g = new THREE.Group();
 				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.skin);
@@ -1231,7 +1226,7 @@
 				return g;
 			}
 			createRightHand() {
-				const name = 'rightHand';
+				const name = this.NAME_RIGHTHAND;
 				
 				const g = new THREE.Group();
 				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.skin);
@@ -1250,7 +1245,7 @@
 				return g;
 			}
 			createLeftForearm() {
-				const name = 'leftForearm';
+				const name = this.NAME_LEFTFOREARM;
 				const mat = this.skin.clone();
 				if (this.#debug) { mat.map = this.createTextureIO(); }
 				
@@ -1269,7 +1264,7 @@
 				return g;
 			}
 			createRightForearm() {
-				const name = 'rightForearm';
+				const name = this.NAME_RIGHTFOREARM;
 				const mat = this.skin.clone();
 				if (this.#debug) { mat.map = this.createTextureIO(); }
 
@@ -1287,7 +1282,7 @@
 				return g;
 			}
 			createLeftArm() {
-				const name = 'leftArm';
+				const name = this.NAME_LEFTARM;
 				const mat = this.skin.clone();
 				if (this.#debug) { mat.map = this.createTextureIO(); }
 				
@@ -1317,7 +1312,7 @@
 				return g;
 			}
 			createRightArm() {
-				const name = 'rightArm';
+				const name = this.NAME_RIGHTARM;
 				const mat = this.skin.clone();
 				if (this.#debug) { mat.map = this.createTextureIO(); }
 				
@@ -1346,7 +1341,7 @@
 				return g;
 			}
 			createLeftFoot() {
-				const name = 'leftFoot';
+				const name = this.NAME_LEFTFOOT;
 
 				const g = new THREE.Group();
 				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.skin);
@@ -1366,7 +1361,7 @@
 				return g;
 			}
 			createRightFoot() {
-				const name = 'rightFoot';
+				const name = this.NAME_RIGHTFOOT;
 				
 				const g = new THREE.Group();
 				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.skin);
@@ -1386,7 +1381,7 @@
 				return g;
 			}
 			createLeftForeleg() {
-				const name = 'leftForeleg';
+				const name = this.NAME_LEFTFORELEG;
 				const mat = this.skin.clone();
 				if (this.#debug) { mat.map = this.createTextureFB(); }
 
@@ -1414,7 +1409,7 @@
 				return g;
 			}
 			createRightForeleg() {
-				const name = 'rightForeleg';
+				const name = this.NAME_RIGHTFORELEG;
 				const mat = this.skin.clone();
 				if (this.#debug) { mat.map = this.createTextureFB(); }
 
@@ -1442,7 +1437,7 @@
 				return g;
 			}
 			createLeftLeg() {
-				const name = 'leftLeg';
+				const name = this.NAME_LEFTLEG;
 				const mat = this.skin.clone();
 				if (this.#debug) { mat.map = this.createTextureFB(); }
 
@@ -1470,7 +1465,7 @@
 				return g;
 			}
 			createRightLeg() {
-				const name = 'rightLeg';
+				const name = this.NAME_RIGHTLEG;
 				const mat = this.skin.clone();
 				if (this.#debug) { mat.map = this.createTextureFB(); }
 
@@ -1498,7 +1493,7 @@
 				return g;
 			}
 			createBody() {
-				const name = 'body';
+				const name = this.NAME_BODY;
 				const mat = this.skin.clone();
 				mat.map = this.createTextureFB();
 				
@@ -1534,7 +1529,7 @@
 				return g;
 			}
 			createWaist() {
-				const name = 'waist';
+				const name = this.NAME_WAIST;
 				const mat = this.skin.clone();
 				if (this.#debug) { mat.map = this.createTextureFB(25, 50); }
 				
@@ -1556,7 +1551,32 @@
 				}
 				return g;
 			}
-			constructor(skin = null, shirt = null, pants = null, shoes = null) {
+			constructor(id = null, skin = null, shirt = null, pants = null, shoes = null) {
+				this.NAME_HEAD			= ((id == null)?'':id+':') + 'head';
+				this.NAME_BODY			= ((id == null)?'':id+':') + 'body';
+				this.NAME_WAIST			= ((id == null)?'':id+':') + 'waist';
+				this.NAME_LEFTARM		= ((id == null)?'':id+':') + 'leftArm';
+				this.NAME_LEFTFOREARM	= ((id == null)?'':id+':') + 'leftForearm';
+				this.NAME_LEFTHAND		= ((id == null)?'':id+':') + 'leftHand';
+				this.NAME_RIGHTARM		= ((id == null)?'':id+':') + 'rightArm';
+				this.NAME_RIGHTFOREARM	= ((id == null)?'':id+':') + 'rightForearm';
+				this.NAME_RIGHTHAND		= ((id == null)?'':id+':') + 'rightHand';
+				this.NAME_LEFTLEG		= ((id == null)?'':id+':') + 'leftLeg';
+				this.NAME_LEFTFORELEG	= ((id == null)?'':id+':') + 'leftForeleg';
+				this.NAME_LEFTFOOT		= ((id == null)?'':id+':') + 'leftFoot';
+				this.NAME_RIGHTLEG		= ((id == null)?'':id+':') + 'rightLeg';
+				this.NAME_RIGHTFORELEG	= ((id == null)?'':id+':') + 'rightForeleg';
+				this.NAME_RIGHTFOOT		= ((id == null)?'':id+':') + 'rightFoot';
+				this.NAME_DOLL			= ((id == null)?'':id+':') + 'doll';
+				
+				this.data = [
+					{label: this.NAME_HEAD},		{label: this.NAME_BODY},			{label: this.NAME_WAIST},
+					{label: this.NAME_LEFTARM},		{label: this.NAME_LEFTFOREARM},		{label: this.NAME_LEFTHAND},
+					{label: this.NAME_RIGHTARM},	{label: this.NAME_RIGHTFOREARM},	{label: this.NAME_RIGHTHAND},
+					{label: this.NAME_LEFTLEG},		{label: this.NAME_LEFTFORELEG},		{label: this.NAME_LEFTFOOT},
+					{label: this.NAME_RIGHTLEG},	{label: this.NAME_RIGHTFORELEG},	{label: this.NAME_RIGHTFOOT},
+				];
+				
 				this.skin  = skin  ?? new THREE.MeshStandardMaterial({color: 0xddaa88});
 				this.shirt = shirt ?? new THREE.MeshStandardMaterial({color: 0xee3030});
 				this.pants = pants ?? new THREE.MeshStandardMaterial({color: 0x303030});
@@ -1567,39 +1587,31 @@
 				this.waist = this.createWaist();
 				this.waist.position.y = 0.87;
 				this.doll.add(this.waist);
-				this.scheduler = new Scheduler(this);
 			}
-			setListener(listener) { this.scheduler.setListener(listener); }
-			getObject() { return this.doll; }
+
 			getPart(name) {
 				switch (name) {
-				case 'head':			return this.head;
-				case 'body':			return this.body;
-				case 'waist':			return this.waist;
-				case 'leftArm':			return this.leftArm;
-				case 'leftForearm':		return this.leftForearm;
-				case 'leftHand':		return this.leftHand;
-				case 'rightArm':		return this.rightArm;
-				case 'rightForearm':	return this.rightForearm;
-				case 'rightHand':		return this.rightHand;
-				case 'leftLeg':			return this.leftLeg;
-				case 'leftForeleg':		return this.leftForeleg;
-				case 'leftFoot':		return this.leftFoot;
-				case 'rightLeg':		return this.rightLeg;
-				case 'rightForeleg':	return this.rightForeleg;
-				case 'rightFoot':		return this.rightFoot;
+				case this.NAME_HEAD:			return this.head;
+				case this.NAME_BODY:			return this.body;
+				case this.NAME_WAIST:			return this.waist;
+				case this.NAME_LEFTARM:			return this.leftArm;
+				case this.NAME_LEFTFOREARM:		return this.leftForearm;
+				case this.NAME_LEFTHAND:		return this.leftHand;
+				case this.NAME_RIGHTARM:		return this.rightArm;
+				case this.NAME_RIGHTFOREARM:	return this.rightForearm;
+				case this.NAME_RIGHTHAND:		return this.rightHand;
+				case this.NAME_LEFTLEG:			return this.leftLeg;
+				case this.NAME_LEFTFORELEG:		return this.leftForeleg;
+				case this.NAME_LEFTFOOT:		return this.leftFoot;
+				case this.NAME_RIGHTLEG:		return this.rightLeg;
+				case this.NAME_RIGHTFORELEG:	return this.rightForeleg;
+				case this.NAME_RIGHTFOOT:		return this.rightFoot;
 				}
 				return null;
 			}
-			getRange(partName) {
-				const part = this.getPart(partName);
-				if (part === null) { return null; }
-				for (let i = 0; i < this.#data.length; ++i) {
-					if (partName === this.#data[i].label) { return this.#data[i]; }
-				}
-				return null;
-			}
-			move(command, delta) {
+
+			getObject() { return this.doll; }
+			move(part, command, delta) {
 				switch (command) {
 				case 'MX': this.doll.position.x = delta; return;
 				case 'MY': this.doll.position.y = delta; return;
@@ -1620,11 +1632,11 @@
 				if (part === null) { return null; }
 				return {name: partName, rx: part.rotation.x, ry: part.rotation.y, rz: part.rotation.z};
 			}
-			getMoveParameter() { return {name: 'doll', mx: this.doll.position.x, my: this.doll.position.y, mz: this.doll.position.z}; }
+			getMoveParameter() { return {name: this.NAME_DOLL, mx: this.doll.position.x, my: this.doll.position.y, mz: this.doll.position.z}; }
 			getAllParameter() {
 				const data = [];
-				for (let i = 0; i < this.#data.length; ++i) {
-					const label = this.#data[i].label;
+				for (let i = 0; i < this.data.length; ++i) {
+					const label = this.data[i].label;
 					data.push(this.getPartParameter(label));
 				}
 				data.push(this.getMoveParameter());
@@ -1632,7 +1644,7 @@
 			}
 			setAllParameter(param) {
 				param.forEach((data) => {
-					if (data.name === 'doll') {
+					if (data.name === this.NAME_DOLL) {
 						this.doll.position.set(data.mx, data.my, data.mz);
 					}
 					else {
@@ -1644,7 +1656,7 @@
 			getAllParameterDiff(param) {
 				const result = [];
 				param.forEach((data) => {
-					if (data.name === 'doll') {
+					if (data.name === this.NAME_DOLL) {
 						result.push({name: data.name, mx: data.mx - this.doll.position.x, my: data.my - this.doll.position.y, mz: data.mz - this.doll.position.z});
 					}
 					else {
@@ -1656,7 +1668,7 @@
 			}
 			addAllParameter(param, delta) {
 				param.forEach((data) => {
-					if (data.name === 'doll') {
+					if (data.name === this.NAME_DOLL) {
 						this.doll.position.set(this.doll.position.x + data.mx*delta, this.doll.position.y + data.my*delta, this.doll.position.z + data.mz*delta);
 					}
 					else {
@@ -1665,17 +1677,10 @@
 					}
 				});
 			}
-		
-			setScenario(scenario) { this.scheduler.setScenario(scenario); }
-			setAnimationScale(scale) { this.scheduler.setScale(scale); }
-			animate() { this.scheduler.animate(); }
-			isRunning() { return this.scheduler.isRunning(); }
-			run(no) { this.scheduler.run(no); }
-			pause() { this.scheduler.pause(); }
-			stop() { this.scheduler.stop(); }
 		}
 		
 		const dolls = [];
+		const schedulers = [];
 		let playScale = 0;
 
 		const scene = new THREE.Scene();
@@ -1690,25 +1695,31 @@
 		
 		[[0, 0, 3]].forEach(([x,y,z]) => {
 			const doll = new Doll();
-			const scenario = structuredClone(_scenario);
-			doll.setScenario(scenario);
 			const g = new THREE.Group();
 			g.add(doll.getObject());
 			g.position.set(x, y, z);
 			g.rotation.set(0, Math.PI, 0);
 			scene.add(g);
 			dolls.push(doll);
+
+			const scheduler = new Scheduler(doll);
+			const scenario = structuredClone(_scenario);
+			scheduler.setScenario(scenario);
+			schedulers.push(scheduler);
 		});
 		[[-2, 0, 1], [0, 0, 1], [2, 0, 1],	[-2, 0, -1], [0, 0, -1], [2, 0, -0.5],	[-2, 0,-3], [0, 0,-3], [2, 0,-3]].forEach(([x,y,z]) => {
 			const doll = new Doll();
-			const scenario = structuredClone(_scenario);
-			scenario[0].wait += 20;
-			doll.setScenario(scenario);
 			const g = new THREE.Group();
 			g.add(doll.getObject());
 			g.position.set(x, y, z);
 			scene.add(g);
 			dolls.push(doll);
+
+			const scheduler = new Scheduler(doll);
+			const scenario = structuredClone(_scenario);
+			scenario[0].wait += 20;
+			scheduler.setScenario(scenario);
+			schedulers.push(scheduler);
 		});
 		
 		console.log(dolls);
@@ -1739,21 +1750,21 @@
 
 		document.getElementById('play').addEventListener('click', () => {
 			playScale = 0;
-			dolls.forEach((doll) => doll.run(0));
+			schedulers.forEach((sheduler) => sheduler.run(0));
 		});
 		document.getElementById('fast').addEventListener('click', () => {
 			playScale = Math.max(-2, playScale-1);
-			dolls.forEach((doll) => doll.setAnimationScale(playScale));
+			schedulers.forEach((sheduler) => sheduler.setScale(playScale));
 		});
 		document.getElementById('slow').addEventListener('click', () => {
 			playScale = Math.min(2, playScale+1);
-			dolls.forEach((doll) => doll.setAnimationScale(playScale));
+			schedulers.forEach((sheduler) => sheduler.setScale(playScale));
 		});
 		document.getElementById('pause').addEventListener('click', () => {
-			dolls.forEach((doll) => doll.pause());
+			schedulers.forEach((sheduler) => sheduler.pause());
 		});
 		document.getElementById('stop').addEventListener('click', () => {
-			dolls.forEach((doll) => doll.stop());
+			schedulers.forEach((sheduler) => sheduler.stop());
 		});
 		
 
@@ -1761,7 +1772,7 @@
 			renderer.setSize(getWidth(), getHeight());
 			renderer.render(scene, camera);
 			
-			dolls.forEach((doll) => doll.animate());
+			schedulers.forEach((sheduler) => sheduler.animate());
 			
 			requestAnimationFrame(animate);
 		}
