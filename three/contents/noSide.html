@@ -1,0 +1,1836 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta name="Author" content="Sakamoto Takashi">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>NO SIDE</title>
+		<style>
+		#control-div		{ position: absolute; top: 5px; left:   5px; z-index: 1; }
+		#scenario-div		{ position: absolute; top: 5px; right:  5px; z-index: 1; }
+		#canvas				{ position: absolute; top: 0px; left:   0px; z-index: 0; }
+		.align-right		{ text-align: right; }
+		.number				{ text-align: right; font-family: monospace; }
+		.scroll-box			{ height: 40em; overflow-y: auto; border: 1px solid #ccc; padding: 3px; }
+		table				{ border-collapse: collapse; }
+
+		#scenario-table tr			{ background-color: transparent; }
+		#scenario-table tr.edit		{ background-color: #ff0; }
+		#scenario-table tr.run		{ background-color: #f0f; }
+		</style>
+		<script type="importmap">
+		{
+		  "imports": {
+			"three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+			"three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+		  }
+		}
+		</script>
+	</head>
+	<body>
+		<div id="control-div"></div>
+		<div id="scenario-div"></div>
+		<div id="canvas" style="width: 100%; height: 100%;"></div>
+		<script type="module">
+		import * as THREE from 'three';
+		import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+		const EDIT_MODE = false;
+		const MAX_SCENARIO_LINE = 1000;
+		const CONTROL_PARAMETERS = [
+			{label: 'RX', index: 'rx', dispId: 'dispRX', min: -1000, max: 1000, initValue: 0, steps: [-100, -10, -1, 1, 10, 100]},
+			{label: 'RY', index: 'ry', dispId: 'dispRY', min: -1000, max: 1000, initValue: 0, steps: [-100, -10, -1, 1, 10, 100]},
+			{label: 'RZ', index: 'rz', dispId: 'dispRZ', min: -1000, max: 1000, initValue: 0, steps: [-100, -10, -1, 1, 10, 100]},
+			{label: 'MX', index: 'mx', dispId: 'dispMX', min: -5000, max: 5000, initValue: 0, steps: [-100, -10, -1, 1, 10, 100]},
+			{label: 'MY', index: 'my', dispId: 'dispMY', min: -1000, max: 1000, initValue: 0, steps: [-100, -10, -1, 1, 10, 100]},
+			{label: 'MZ', index: 'mz', dispId: 'dispMZ', min: -5000, max: 5000, initValue: 0, steps: [-100, -10, -1, 1, 10, 100]}
+		];
+		const CAMERA_CONTROL_PARAMETERS = [
+			{dir: 'Front',	position: [ 0,  1,  4]},
+			{dir: 'Back',	position: [ 0,  1, -4]},
+			{dir: null},
+			{dir: 'Left',	position: [ 4,  1,  0]},
+			{dir: 'Right',  position: [-4,  1,  0]},
+			{dir: null},
+			{dir: 'Up', 	position: [ 0,  5,  0]},
+			{dir: 'Down',	position: [ 0, -3,  0]}
+		];
+		const [DURATION_DEFAULT, WAIT_DEFAULT] = [20, 0];
+
+		const canvas = document.querySelector('#canvas');
+		function getWidth()  { return canvas.getBoundingClientRect().width; }
+		function getHeight() { return canvas.getBoundingClientRect().height; }
+
+		class Scheduler {
+			setScenario(scenario) {
+				this.scenario = scenario;
+				this.index = -1;
+			}
+			setListener(listener) { this.listener = listener; }
+			isRunning() { return this.index >= 0; }
+			getDiffPattern(target, source) {
+				const result = [];
+				target.forEach((elem1) => {
+					if (elem1.name !== 'doll') { 
+						const elem2 = source.find(item => item.name === elem1.name);
+						result.push(Object.fromEntries(Object.keys(elem1).map(key => [key, (typeof elem1[key] === 'number')?(elem1[key]-elem2[key]):elem1[key]])));
+					}
+				});
+				return result;
+			}
+			getDiffPatterns(targets, sources) {
+				const results = [];
+				for (let i = 0; i < targets.length; ++i) { results.push(this.getDiffPattern(targets[i], sources[i])); }
+				return results;
+			}
+			setIndex(no) {
+				this.index = no;
+				this.listener?.('index', this.index);
+				if (this.index < 0) { return; }
+				this.pattern		= this.scenario[this.index].pattern;
+				this.durationTime	= Math.max(1, Math.floor(this.scenario[this.index].duration * 2**this.scale));
+				this.waitTime		= Math.max(0, Math.floor(this.scenario[this.index].wait * 2**this.scale));
+				this.diffPattern	= (this.scenario[this.index].pattern.every(Array.isArray))
+					?this.getDiffPatterns(this.scenario[this.index].pattern, this.object.getAllParameter())
+					:this.getDiffPattern(this.scenario[this.index].pattern, this.object.getAllParameter())
+				this.diffDuration	= this.durationTime;
+			}
+			setScale(scale) { this.scale = scale; }
+			run(no) {
+				this.setIndex(no);
+				this.scale = 0;
+				this.pausing = false;
+			}
+			next() {
+				let next = -1;
+				for (let i = this.index+1; i < this.scenario.length; ++i) {
+					if (this.scenario[i].checked) { next = i; break; }
+				}
+				this.setIndex(next);
+			}
+			stop() { this.setIndex(-1); }
+			pause() { this.pausing = !this.pausing; }
+			constructor(object) {
+				this.object = object;
+				this.scale = 0;
+				this.pausing = false;
+			}
+			animate() {
+				if (!this.isRunning() || this.pausing) { return; }
+				if (this.durationTime > 0) {
+					--this.durationTime;
+					if (this.durationTime == 0)	{ this.object.setAllParameter(this.pattern); }
+					else						{ this.object.addAllParameter(this.diffPattern, 1/this.diffDuration); }
+					this.listener?.('object');
+				}
+				else if (this.waitTime > 0) { --this.waitTime; }
+				else if (this.waitTime == 0) { this.next(); }
+			}
+		}
+		
+		class Animatable {
+			getPart(name) { throw new Error('getPart(name) must be implemented'); }
+			getObject() { throw new Error('getObject() must be implemented');  }
+			getPartParameterRaw(partName) {
+				const part = this.getPart(partName);
+				if (part === null) { return null; }
+				return {
+					name: partName,
+					rx: part.rotation.x/Math.PI*180,
+					ry: part.rotation.y/Math.PI*180,
+					rz: part.rotation.z/Math.PI*180,
+					mx: part.position.x*100,
+					my: part.position.y*100,
+					mz: part.position.z*100
+				};
+			}
+			setDefault(partNames) {
+				this.partMap = new Map();
+				partNames.forEach((partName) => {
+					const param = this.getPartParameterRaw(partName);
+					if (param !== null) { this.partMap.set(param.name, param); }
+				});
+			}
+			
+			movePart(partName, command, delta) {
+				const part = this.getPart(partName);
+				if (part === null) { return; }
+				switch (command) {
+				case 'RX': part.rotation.x = (delta + this.partMap.get(partName).rx)/180*Math.PI; return;
+				case 'RY': part.rotation.y = (delta + this.partMap.get(partName).ry)/180*Math.PI; return;
+				case 'RZ': part.rotation.z = (delta + this.partMap.get(partName).rz)/180*Math.PI; return;
+				case 'MX': part.position.x = (delta + this.partMap.get(partName).mx)/100; return;
+				case 'MY': part.position.y = (delta + this.partMap.get(partName).my)/100; return;
+				case 'MZ': part.position.z = (delta + this.partMap.get(partName).mz)/100; return;
+				}
+			}
+			getPartParameter(partName) {
+				const part = this.getPart(partName);
+				if (part === null) { return null; }
+				return {
+					name: partName,
+					rx: part.rotation.x/Math.PI*180 - this.partMap.get(partName).rx,
+					ry: part.rotation.y/Math.PI*180 - this.partMap.get(partName).ry,
+					rz: part.rotation.z/Math.PI*180 - this.partMap.get(partName).rz,
+					mx: part.position.x*100 - this.partMap.get(partName).mx,
+					my: part.position.y*100 - this.partMap.get(partName).my,
+					mz: part.position.z*100 - this.partMap.get(partName).mz
+				};
+			}
+			getAllParameter() {
+				const data = [];
+				for (let i = 0; i < this.data.length; ++i) { data.push(this.getPartParameter(this.data[i])); }
+				return data;
+			}
+			setAllParameter(param) {
+				param.forEach((data) => {
+					const part = this.getPart(data.name);
+					if (part === null) { return; }
+					part.rotation.set(
+						(data.rx + this.partMap.get(data.name).rx)/180*Math.PI,
+						(data.ry + this.partMap.get(data.name).ry)/180*Math.PI,
+						(data.rz + this.partMap.get(data.name).rz)/180*Math.PI
+					);
+					part.position.set(
+						(data.mx + this.partMap.get(data.name).mx)/100,
+						(data.my + this.partMap.get(data.name).my)/100,
+						(data.mz + this.partMap.get(data.name).mz)/100
+					);
+				});
+			}
+			getAllParameterDiff(param) {
+				const result = [];
+				param.forEach((data) => {
+					const part = this.getPart(data.name);
+					if (part === null) { return; }
+					result.push({
+						name: data.name,
+						rx: data.rx/180*Math.PI - part.rotation.x - this.partMap.get(data.name).rx,
+						ry: data.ry/180*Math.PI - part.rotation.y - this.partMap.get(data.name).ry,
+						rz: data.rz/180*Math.PI - part.rotation.z - this.partMap.get(data.name).rz,
+						mx: data.mx/100 - part.position.x - this.partMap.get(data.name).mx,
+						my: data.my/100 - part.position.y - this.partMap.get(data.name).my,
+						mz: data.mz/100 - part.position.z - this.partMap.get(data.name).mz
+					});
+				});
+				return result;
+			}
+			addAllParameter(param, delta) {
+				param.forEach((data) => {
+					const part = this.getPart(data.name);
+					if (part === null) { return; }
+					part.rotation.set(
+						part.rotation.x + data.rx*delta/180*Math.PI,
+						part.rotation.y + data.ry*delta/180*Math.PI,
+						part.rotation.z + data.rz*delta/180*Math.PI
+					);
+					part.position.set(
+						part.position.x + data.mx*delta/100,
+						part.position.y + data.my*delta/100,
+						part.position.z + data.mz*delta/100
+					);
+				});
+			}
+		}
+
+		class Doll extends Animatable {
+			#debug = false;
+
+			createTextureFace() {
+				const canvas = document.createElement('canvas');
+				canvas.width = 512;
+				canvas.height = 256;
+				const ctx = canvas.getContext('2d');
+				ctx.fillStyle = '#ffffff';
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+				ctx.beginPath();
+				ctx.ellipse(100, 128, 17, 10, 0, 0, Math.PI*2);
+				ctx.ellipse(156, 128, 17, 10, 0, 0, Math.PI*2);
+				ctx.fillStyle = '#202020';
+				ctx.fill();
+
+				ctx.beginPath();
+				ctx.ellipse(128, 160, 40, 30, 0, 0.3, Math.PI-0.3);
+				ctx.fillStyle = '#ff2020';
+				ctx.fill();
+				
+				ctx.beginPath();
+				ctx.moveTo(  0,   0);
+				ctx.lineTo(  0, 150);
+				ctx.lineTo(100,  85);
+				ctx.lineTo(156, 100);
+				ctx.lineTo(256, 130);
+				ctx.lineTo(384, 210);
+				ctx.lineTo(512, 150);
+				ctx.lineTo(512,   0);
+				ctx.closePath();
+				ctx.fillStyle = '#202020';
+				ctx.fill();
+
+				const texture = new THREE.CanvasTexture(canvas);
+				return texture;
+			}
+			createTextureFB(offset=0, point=80) {
+				const canvas = document.createElement('canvas');
+				canvas.width = 512;
+				canvas.height = 256;
+				const ctx = canvas.getContext('2d');
+				ctx.fillStyle = '#ffffff';
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'middle';
+				ctx.font = `bold ${point}px sans-serif`;
+				ctx.fillStyle = '#000';
+				ctx.fillText('前', canvas.width*1/4, canvas.height/2+offset); 
+				ctx.fillText('後', canvas.width*3/4, canvas.height/2+offset); 
+				const texture = new THREE.CanvasTexture(canvas);
+				return texture;
+			}
+			createTextureIO() {
+				const canvas = document.createElement('canvas');
+				canvas.width = 512;
+				canvas.height = 256;
+				const ctx = canvas.getContext('2d');
+				ctx.fillStyle = '#ffffff';
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'middle';
+				ctx.font = 'bold 80px sans-serif';
+				ctx.fillStyle = '#000';
+				ctx.fillText('内', canvas.width*1/4, canvas.height/2); 
+				ctx.fillText('外', canvas.width*3/4, canvas.height/2); 
+				const texture = new THREE.CanvasTexture(canvas);
+				return texture;
+			}
+			createHead() {
+				const name = this.NAME_HEAD;
+				const mat = this.skin.clone();
+				mat.map = (this.#debug)?this.createTextureFB():this.createTextureFace();
+
+				const g = new THREE.Group();
+				const m1 = new THREE.Mesh(new THREE.SphereGeometry(0.16), mat);
+				m1.name = name;
+				m1.scale.set(0.8,1.0,0.9);
+				m1.position.y = 0.16;
+				const m2 = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.1), this.skin);
+				m2.name = name;
+				m2.scale.set(1,1,0.8);
+				m2.rotation.z = Math.PI/2+0.1;
+				m2.position.set(-0.085, 0.14, 0.02);
+				const m3 = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.1), this.skin);
+				m3.name = name;
+				m3.scale.set(1,1,0.8);
+				m3.rotation.z = Math.PI/2-0.1;
+				m3.position.set(0.085, 0.14, 0.02);
+				g.add(m1, m2, m3);
+				return g;
+			}
+			createLeftHand() {
+				const name = this.NAME_LEFTHAND;
+				
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.skin);
+				m0.name = name;
+				m0.scale.set(0.9, 1, 1);
+				m0.position.set(0, 0, 0);
+				const m1 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 32, 16, 0, Math.PI*2, 0, Math.PI*3/4), this.skin);
+				m1.name = name;
+				m1.scale.set(0.5, 1, 1);
+				m1.position.set(0.01, -0.06, 0);
+				const m2 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.skin);
+				m2.name = name;
+				m2.scale.set(0.9, 0.8, 1);
+				m2.position.set(-0.005, -0.09, 0);
+				g.add(m0, m1, m2);
+				return g;
+			}
+			createRightHand() {
+				const name = this.NAME_RIGHTHAND;
+				
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.skin);
+				m0.name = name;
+				m0.scale.set(0.9, 1, 1);
+				m0.position.set(0, 0, 0);
+				const m1 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 32, 16, 0, Math.PI*2, 0, Math.PI*3/4), this.skin);
+				m1.name = name;
+				m1.scale.set(0.5, 1, 1);
+				m1.position.set(-0.01, -0.06, 0);
+				const m2 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.skin);
+				m2.name = name;
+				m2.scale.set(0.9, 0.8, 1);
+				m2.position.set(0.005, -0.09, 0);
+				g.add(m0, m1, m2);
+				return g;
+			}
+			createLeftForearm() {
+				const name = this.NAME_LEFTFOREARM;
+				const mat = this.skin.clone();
+				if (this.#debug) { mat.map = this.createTextureIO(); }
+				
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.07), this.skin);
+				m0.name = name;
+				m0.scale.set(0.9, 1, 1);
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.05, 0.26), mat);
+				m1.name = name;
+				m1.scale.set(0.9, 1, 1);
+				m1.rotation.y = Math.PI;
+				m1.position.set(0, -0.13, 0);
+				this.leftHand = this.createLeftHand(this.skin);
+				this.leftHand.position.set(0, -0.26, 0);
+				g.add(m0, m1, this.leftHand);
+				return g;
+			}
+			createRightForearm() {
+				const name = this.NAME_RIGHTFOREARM;
+				const mat = this.skin.clone();
+				if (this.#debug) { mat.map = this.createTextureIO(); }
+
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.07), this.skin);
+				m0.name = name;
+				m0.scale.set(0.9, 1, 1);
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.05, 0.26), mat);
+				m1.name = name;
+				m1.scale.set(0.9, 1, 1);
+				m1.position.set(0, -0.13, 0);
+				this.rightHand = this.createRightHand(this.skin);
+				this.rightHand.position.set(0, -0.26, 0);
+				g.add(m0, m1, this.rightHand);
+				return g;
+			}
+			createLeftArm() {
+				const name = this.NAME_LEFTARM;
+				const mat = this.skin.clone();
+				if (this.#debug) { mat.map = this.createTextureIO(); }
+				
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.skin);
+				m0.name = name;
+				m0.scale.set(0.9, 1, 1);
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.3), mat);
+				m1.name = name;
+				m1.scale.set(0.9, 1, 1);
+				m1.rotation.y = Math.PI;
+				m1.position.set(0, -0.15, 0);
+				this.leftForearm = this.createLeftForearm(this.skin);
+				this.leftForearm.position.set(0, -0.3, 0);
+				g.add(m0, m1, this.leftForearm);
+				if (!this.#debug) {	
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.shirt);
+					m0.name = name;
+					m0.scale.set(0.92, 1.02, 1.02);
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.24), this.shirt);
+					m1.name = name;
+					m1.scale.set(0.92, 1, 1.02);
+					m1.rotation.y = Math.PI;
+					m1.position.set(0, -0.12, 0);
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createRightArm() {
+				const name = this.NAME_RIGHTARM;
+				const mat = this.skin.clone();
+				if (this.#debug) { mat.map = this.createTextureIO(); }
+				
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.skin);
+				m0.name = name;
+				m0.scale.set(0.9, 1, 1);
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.3), mat);
+				m1.name = name;
+				m1.scale.set(0.9, 1, 1);
+				m1.position.set(0, -0.15, 0);
+				this.rightForearm = this.createRightForearm(this.skin);
+				this.rightForearm.position.set(0, -0.3, 0);
+				g.add(m0, m1, this.rightForearm);
+				if (!this.#debug) {	
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.shirt);
+					m0.name = name;
+					m0.scale.set(0.92, 1.02, 1.02);
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.24), this.shirt);
+					m1.name = name;
+					m1.scale.set(0.92, 1, 1.02);
+					m1.rotation.y = Math.PI;
+					m1.position.set(0, -0.12, 0);
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createLeftFoot() {
+				const name = this.NAME_LEFTFOOT;
+
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.skin);
+				m0.name = name;
+				const m1 = new THREE.Mesh(new THREE.SphereGeometry(0.07), this.skin);
+				m1.name = name;
+				m1.scale.set(1, 0.5, 1.6);
+				m1.position.set(0, -0.03, 0.04);
+				g.add(m0, m1);
+				if (!this.#debug) {
+					const m1 = new THREE.Mesh(new THREE.SphereGeometry(0.07), this.shoes);
+					m1.name = name;
+					m1.scale.set(1.02, 0.5, 1.62);
+					m1.position.set(0, -0.03, 0.04);
+					g.add(m1);
+				}
+				return g;
+			}
+			createRightFoot() {
+				const name = this.NAME_RIGHTFOOT;
+				
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.skin);
+				m0.name = name;
+				const m1 = new THREE.Mesh(new THREE.SphereGeometry(0.07), this.skin);
+				m1.name = name;
+				m1.scale.set(1, 0.5, 1.6);
+				m1.position.set(0, -0.03, 0.04);
+				g.add(m0, m1);
+				if (!this.#debug) {
+					const m1 = new THREE.Mesh(new THREE.SphereGeometry(0.07), this.shoes);
+					m1.name = name;
+					m1.scale.set(1.02, 0.5, 1.62);
+					m1.position.set(0, -0.03, 0.04);
+					g.add(m1);
+				}
+				return g;
+			}
+			createLeftForeleg() {
+				const name = this.NAME_LEFTFORELEG;
+				const mat = this.skin.clone();
+				if (this.#debug) { mat.map = this.createTextureFB(); }
+
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.skin);
+				m0.name = name;
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.36), mat);
+				m1.name = name;
+				m1.rotation.y = -Math.PI/2;
+				m1.position.set(0, -0.18, 0);
+				this.leftFoot = this.createLeftFoot(this.skin);
+				this.leftFoot.position.set(0, -0.36, 0);
+				g.add(m0, m1, this.leftFoot);
+				if (!this.#debug) {
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.pants);
+					m0.name = name;
+					m0.scale.set(1.02, 1, 1.02);
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.36), this.pants);
+					m1.name = name;
+					m1.scale.set(1.02, 1, 1.02);
+					m1.rotation.y = -Math.PI/2;
+					m1.position.set(0, -0.18, 0);
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createRightForeleg() {
+				const name = this.NAME_RIGHTFORELEG;
+				const mat = this.skin.clone();
+				if (this.#debug) { mat.map = this.createTextureFB(); }
+
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.skin);
+				m0.name = name;
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.36), mat);
+				m1.name = name;
+				m1.rotation.y = -Math.PI/2;
+				m1.position.set(0, -0.18, 0);
+				this.rightFoot = this.createRightFoot(this.skin);
+				this.rightFoot.position.set(0, -0.36, 0);
+				g.add(m0, m1, this.rightFoot);
+				if (!this.#debug) {
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.pants);
+					m0.name = name;
+					m0.scale.set(1.02, 1, 1.02);
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.36), this.pants);
+					m1.name = name;
+					m1.scale.set(1.02, 1, 1.02);
+					m1.rotation.y = -Math.PI/2;
+					m1.position.set(0, -0.18, 0);
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createLeftLeg() {
+				const name = this.NAME_LEFTLEG;
+				const mat = this.skin.clone();
+				if (this.#debug) { mat.map = this.createTextureFB(); }
+
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.10), this.skin);
+				m0.name = name;
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.08, 0.36), mat);
+				m1.name = name;
+				m1.rotation.y = -Math.PI/2;
+				m1.position.set(0, -0.18, 0);
+				this.leftForeleg = this.createLeftForeleg(this.skin);
+				this.leftForeleg.position.set(0, -0.36, 0);
+				g.add(m0, m1, this.leftForeleg);
+				if (!this.#debug) {
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.10), this.pants);
+					m0.name = name;
+					m0.scale.set(1.02, 1, 1.02);
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.08, 0.36), this.pants);
+					m1.name = name;
+					m1.scale.set(1.02, 1, 1.02);
+					m1.rotation.y = -Math.PI/2;
+					m1.position.set(0, -0.18, 0);
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createRightLeg() {
+				const name = this.NAME_RIGHTLEG;
+				const mat = this.skin.clone();
+				if (this.#debug) { mat.map = this.createTextureFB(); }
+
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.10), this.skin);
+				m0.name = name;
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.08, 0.36), mat);
+				m1.name = name;
+				m1.rotation.y = -Math.PI/2;
+				m1.position.set(0, -0.18, 0);
+				this.rightForeleg = this.createRightForeleg(this.skin);
+				this.rightForeleg.position.set(0, -0.36, 0);
+				g.add(m0, m1, this.rightForeleg);
+				if (!this.#debug) {
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.10), this.pants);
+					m0.name = name;
+					m0.scale.set(1.02, 1, 1.02);
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.08, 0.36), this.pants);
+					m1.name = name;
+					m1.scale.set(1.02, 1, 1.02);
+					m1.rotation.y = -Math.PI/2;
+					m1.position.set(0, -0.18, 0);
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createBody() {
+				const name = this.NAME_BODY;
+				const mat = this.skin.clone();
+				mat.map = this.createTextureFB();
+				
+				const g = new THREE.Group();
+				this.head = this.createHead(this.skin);
+				this.head.position.y = 0.59;
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.31), this.skin);
+				m0.name = name;
+				m0.scale.set(0.7,0.3,0.5);
+				m0.position.y = 0.50;
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.28, 0.50), mat);
+				m1.name = name;
+				m1.position.y = 0.25;
+				m1.scale.set(0.5,1.0,0.7);
+				m1.rotation.y = -Math.PI/2;
+				this.leftArm = this.createLeftArm(this.skin);
+				this.leftArm.position.set( 0.27, 0.48, 0);
+				this.rightArm = this.createRightArm(this.skin);
+				this.rightArm.position.set(-0.27, 0.48, 0);
+				g.add(this.head, m0, m1, this.leftArm, this.rightArm);
+				if (!this.#debug) {	
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.31), this.shirt);
+					m0.name = name;
+					m0.scale.set(0.72, 0.3, 0.52);
+					m0.position.y = 0.50;
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.28, 0.50), this.shirt);
+					m1.name = name;
+					m1.position.y = 0.25;
+					m1.scale.set(0.52,1.0,0.72);
+					m1.rotation.y = -Math.PI/2;
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createWaist() {
+				const name = this.NAME_WAIST;
+				const mat = this.skin.clone();
+				if (this.#debug) { mat.map = this.createTextureFB(25, 50); }
+				
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.28), mat);
+				m0.name = name;
+				m0.scale.set(0.7,0.5,0.5);
+				this.body = this.createBody();
+				this.leftLeg = this.createLeftLeg();
+				this.leftLeg.position.set( 0.10, -0.1, 0);
+				this.rightLeg = this.createRightLeg();
+				this.rightLeg.position.set(-0.10, -0.1, 0);
+				g.add(m0, this.body, this.leftLeg, this.rightLeg);
+				if (!this.#debug) {
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.28), this.pants);
+					m0.name = name;
+					m0.scale.set(0.72,0.5,0.52);
+					g.add(m0);
+				}
+				return g;
+			}
+
+			constructor(id = null, skin = null, shirt = null, pants = null, shoes = null) {
+				super();
+				this.NAME_HEAD			= ((id == null)?'':id+':') + 'head';
+				this.NAME_BODY			= ((id == null)?'':id+':') + 'body';
+				this.NAME_WAIST			= ((id == null)?'':id+':') + 'waist';
+				this.NAME_LEFTARM		= ((id == null)?'':id+':') + 'leftArm';
+				this.NAME_LEFTFOREARM	= ((id == null)?'':id+':') + 'leftForearm';
+				this.NAME_LEFTHAND		= ((id == null)?'':id+':') + 'leftHand';
+				this.NAME_RIGHTARM		= ((id == null)?'':id+':') + 'rightArm';
+				this.NAME_RIGHTFOREARM	= ((id == null)?'':id+':') + 'rightForearm';
+				this.NAME_RIGHTHAND		= ((id == null)?'':id+':') + 'rightHand';
+				this.NAME_LEFTLEG		= ((id == null)?'':id+':') + 'leftLeg';
+				this.NAME_LEFTFORELEG	= ((id == null)?'':id+':') + 'leftForeleg';
+				this.NAME_LEFTFOOT		= ((id == null)?'':id+':') + 'leftFoot';
+				this.NAME_RIGHTLEG		= ((id == null)?'':id+':') + 'rightLeg';
+				this.NAME_RIGHTFORELEG	= ((id == null)?'':id+':') + 'rightForeleg';
+				this.NAME_RIGHTFOOT		= ((id == null)?'':id+':') + 'rightFoot';
+				this.NAME				= ((id == null)?'':id+':') + 'doll';
+				
+				this.data = [
+					this.NAME_HEAD,		this.NAME_BODY,			this.NAME_WAIST,
+					this.NAME_LEFTARM,	this.NAME_LEFTFOREARM,	this.NAME_LEFTHAND,	this.NAME_RIGHTARM,	this.NAME_RIGHTFOREARM,	this.NAME_RIGHTHAND,
+					this.NAME_LEFTLEG,	this.NAME_LEFTFORELEG,	this.NAME_LEFTFOOT,	this.NAME_RIGHTLEG,	this.NAME_RIGHTFORELEG,	this.NAME_RIGHTFOOT
+				];
+				
+				this.skin  = skin  ?? new THREE.MeshStandardMaterial({color: 0xddaa88});
+				this.shirt = shirt ?? new THREE.MeshStandardMaterial({color: 0xee3030});
+				this.pants = pants ?? new THREE.MeshStandardMaterial({color: 0x303030});
+				this.shoes = shoes ?? new THREE.MeshStandardMaterial({color: 0xcccccc});
+				this.doll = new THREE.Group();
+				this.sphere = new THREE.SphereGeometry(1);
+				this.all = new THREE.Group();
+				this.waist = this.createWaist();
+				this.waist.position.y = 0.87;
+				this.doll.add(this.waist);
+				this.object = this.doll;
+				this.setDefault(this.data);
+			}
+			getPart(name) {
+				switch (name) {
+				case this.NAME:					return this.object;
+				case this.NAME_HEAD:			return this.head;
+				case this.NAME_BODY:			return this.body;
+				case this.NAME_WAIST:			return this.waist;
+				case this.NAME_LEFTARM:			return this.leftArm;
+				case this.NAME_LEFTFOREARM:		return this.leftForearm;
+				case this.NAME_LEFTHAND:		return this.leftHand;
+				case this.NAME_RIGHTARM:		return this.rightArm;
+				case this.NAME_RIGHTFOREARM:	return this.rightForearm;
+				case this.NAME_RIGHTHAND:		return this.rightHand;
+				case this.NAME_LEFTLEG:			return this.leftLeg;
+				case this.NAME_LEFTFORELEG:		return this.leftForeleg;
+				case this.NAME_LEFTFOOT:		return this.leftFoot;
+				case this.NAME_RIGHTLEG:		return this.rightLeg;
+				case this.NAME_RIGHTFORELEG:	return this.rightForeleg;
+				case this.NAME_RIGHTFOOT:		return this.rightFoot;
+				}
+				return null;
+			}
+			getObject() { return this.doll; }
+		}
+		
+		class Rugger extends Doll {
+			createArmTexture() {
+				const canvas = document.createElement('canvas');
+				canvas.width = 512;
+				canvas.height = 256;
+				const ctx = canvas.getContext('2d');
+				ctx.fillStyle = '#ffffff';
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+				ctx.fillStyle = '#202020';
+				ctx.fillRect(0,   0, 512, 100);
+				ctx.fillRect(0, 190, 512, 100);
+				const texture = new THREE.CanvasTexture(canvas);
+				return texture;
+			}
+			createLeftArm() {
+				const name = this.NAME_LEFTARM;
+				const mat = this.skin.clone();
+				
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.skin);
+				m0.name = name;
+				m0.scale.set(0.9, 1, 1);
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.3), mat);
+				m1.name = name;
+				m1.scale.set(0.9, 1, 1);
+				m1.rotation.y = Math.PI;
+				m1.position.set(0, -0.15, 0);
+				this.leftForearm = this.createLeftForearm(this.skin);
+				this.leftForearm.position.set(0, -0.3, 0);
+				g.add(m0, m1, this.leftForearm);
+				{	
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.shirt);
+					m0.name = name;
+					m0.scale.set(0.95, 1.05, 1.05);
+					const mat = this.shirt.clone();
+					mat.map = this.createArmTexture();
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.24), mat);
+					m1.name = name;
+					m1.scale.set(0.95, 1, 1.05);
+					m1.rotation.y = Math.PI;
+					m1.position.set(0, -0.12, 0);
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createRightArm() {
+				const name = this.NAME_RIGHTARM;
+				const mat = this.skin.clone();
+				
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.skin);
+				m0.name = name;
+				m0.scale.set(0.9, 1, 1);
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.3), mat);
+				m1.name = name;
+				m1.scale.set(0.9, 1, 1);
+				m1.position.set(0, -0.15, 0);
+				this.rightForearm = this.createRightForearm(this.skin);
+				this.rightForearm.position.set(0, -0.3, 0);
+				g.add(m0, m1, this.rightForearm);
+				{	
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.shirt);
+					m0.name = name;
+					m0.scale.set(0.95, 1.05, 1.05);
+					const mat = this.shirt.clone();
+					mat.map = this.createArmTexture();
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.24), mat);
+					m1.name = name;
+					m1.scale.set(0.95, 1, 1.05);
+					m1.rotation.y = Math.PI;
+					m1.position.set(0, -0.12, 0);
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createLeftFoot() {
+				const name = this.NAME_LEFTFOOT;
+
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.skin);
+				m0.name = name;
+				const m1 = new THREE.Mesh(new THREE.SphereGeometry(0.07), this.skin);
+				m1.name = name;
+				m1.scale.set(1, 0.5, 1.6);
+				m1.position.set(0, -0.03, 0.04);
+				g.add(m0, m1);
+				{
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.shoes);
+					m0.scale.set(1.01, 1.01, 1.01)
+					m0.name = name;
+					const m1 = new THREE.Mesh(new THREE.SphereGeometry(0.07), this.shoes);
+					m1.name = name;
+					m1.scale.set(1.02, 0.5, 1.62);
+					m1.position.set(0, -0.03, 0.04);
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createRightFoot() {
+				const name = this.NAME_RIGHTFOOT;
+				
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.skin);
+				m0.name = name;
+				const m1 = new THREE.Mesh(new THREE.SphereGeometry(0.07), this.skin);
+				m1.name = name;
+				m1.scale.set(1, 0.5, 1.6);
+				m1.position.set(0, -0.03, 0.04);
+				g.add(m0, m1);
+				{
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.05), this.shoes);
+					m0.scale.set(1.01, 1.01, 1.01)
+					m0.name = name;
+					const m1 = new THREE.Mesh(new THREE.SphereGeometry(0.07), this.shoes);
+					m1.name = name;
+					m1.scale.set(1.02, 0.5, 1.62);
+					m1.position.set(0, -0.03, 0.04);
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createLeftForeleg() {
+				const name = this.NAME_LEFTFORELEG;
+				const mat = this.skin.clone();
+
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.skin);
+				m0.name = name;
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.36), mat);
+				m1.name = name;
+				m1.rotation.y = -Math.PI/2;
+				m1.position.set(0, -0.18, 0);
+				this.leftFoot = this.createLeftFoot(this.skin);
+				this.leftFoot.position.set(0, -0.36, 0);
+				g.add(m0, m1, this.leftFoot);
+				{
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.26), this.stocking);
+					m1.name = name;
+					m1.scale.set(1.01, 1, 1.01);
+					m1.rotation.y = -Math.PI/2;
+					m1.position.set(0, -0.23, 0);
+					g.add(m1);
+				}
+				return g;
+			}
+			createRightForeleg() {
+				const name = this.NAME_RIGHTFORELEG;
+				const mat = this.skin.clone();
+
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.08), this.skin);
+				m0.name = name;
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.36), mat);
+				m1.name = name;
+				m1.rotation.y = -Math.PI/2;
+				m1.position.set(0, -0.18, 0);
+				this.rightFoot = this.createRightFoot(this.skin);
+				this.rightFoot.position.set(0, -0.36, 0);
+				g.add(m0, m1, this.rightFoot);
+				{
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.26), this.stocking);
+					m1.name = name;
+					m1.scale.set(1.02, 1, 1.02);
+					m1.rotation.y = -Math.PI/2;
+					m1.position.set(0, -0.23, 0);
+					g.add(m1);
+				}
+				return g;
+			}
+			createLeftLeg() {
+				const name = this.NAME_LEFTLEG;
+				const mat = this.skin.clone();
+
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.10), this.skin);
+				m0.name = name;
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.08, 0.36), mat);
+				m1.name = name;
+				m1.position.set(0, -0.18, 0);
+				this.leftForeleg = this.createLeftForeleg(this.skin);
+				this.leftForeleg.position.set(0, -0.36, 0);
+				g.add(m0, m1, this.leftForeleg);
+				{
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.11), this.pants);
+					m0.name = name;
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.16), this.pants);
+					m1.name = name;
+					m1.position.set(0, -0.08, 0);
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createRightLeg() {
+				const name = this.NAME_RIGHTLEG;
+				const mat = this.skin.clone();
+
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.10), this.skin);
+				m0.name = name;
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.08, 0.36), mat);
+				m1.name = name;
+				m1.position.set(0, -0.18, 0);
+				this.rightForeleg = this.createRightForeleg(this.skin);
+				this.rightForeleg.position.set(0, -0.36, 0);
+				g.add(m0, m1, this.rightForeleg);
+				{
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.11), this.pants);
+					m0.name = name;
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.16), this.pants);
+					m1.name = name;
+					m1.position.set(0, -0.08, 0);
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createBodyTexture() {
+				const canvas = document.createElement('canvas');
+				canvas.width = 512;
+				canvas.height = 256;
+				const ctx = canvas.getContext('2d');
+				ctx.fillStyle = '#ffffff';
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+				ctx.fillStyle = '#202020';
+				ctx.fillRect(0,   0, 512, 50);
+				ctx.fillRect(0,  90, 512, 50);
+				ctx.fillRect(0, 180, 512, 50);
+				const texture = new THREE.CanvasTexture(canvas);
+				return texture;
+			}
+			createBody() {
+				const name = this.NAME_BODY;
+				const mat = this.skin.clone();
+				mat.map = this.createTextureFB();
+				
+				const g = new THREE.Group();
+				this.head = this.createHead(this.skin);
+				this.head.position.y = 0.59;
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.31), this.skin);
+				m0.name = name;
+				m0.scale.set(0.7,0.3,0.5);
+				m0.position.y = 0.50;
+				const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.28, 0.50), mat);
+				m1.name = name;
+				m1.position.y = 0.25;
+				m1.scale.set(0.5,1.0,0.7);
+				m1.rotation.y = -Math.PI/2;
+				this.leftArm = this.createLeftArm(this.skin);
+				this.leftArm.position.set( 0.27, 0.48, 0);
+				this.rightArm = this.createRightArm(this.skin);
+				this.rightArm.position.set(-0.27, 0.48, 0);
+				g.add(this.head, m0, m1, this.leftArm, this.rightArm);
+				{	
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.31), this.shirt);
+					m0.name = name;
+					m0.scale.set(0.75, 0.3, 0.55);
+					m0.position.y = 0.50;
+					const mat = this.shirt.clone();
+					mat.map = this.createBodyTexture();
+					const m1 = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.28, 0.50), mat);
+					m1.name = name;
+					m1.position.y = 0.25;
+					m1.scale.set(0.55,1.0,0.75);
+					m1.rotation.y = -Math.PI/2;
+					g.add(m0, m1);
+				}
+				return g;
+			}
+			createWaist() {
+				const name = this.NAME_WAIST;
+				const mat = this.skin.clone();
+				
+				const g = new THREE.Group();
+				const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.28), mat);
+				m0.name = name;
+				m0.scale.set(0.7,0.5,0.5);
+				this.body = this.createBody();
+				this.leftLeg = this.createLeftLeg();
+				this.leftLeg.position.set( 0.10, -0.1, 0);
+				this.rightLeg = this.createRightLeg();
+				this.rightLeg.position.set(-0.10, -0.1, 0);
+				g.add(m0, this.body, this.leftLeg, this.rightLeg);
+				{
+					const m0 = new THREE.Mesh(new THREE.SphereGeometry(0.28), this.pants);
+					m0.name = name;
+					m0.scale.set(0.73,0.5,0.52);
+					g.add(m0);
+				}
+				return g;
+			}
+
+			constructor(id = null, skin = null, shirt = null, pants = null, shoes = null) {
+				super();
+				this.NAME_HEAD			= ((id == null)?'':id+':') + 'head';
+				this.NAME_BODY			= ((id == null)?'':id+':') + 'body';
+				this.NAME_WAIST			= ((id == null)?'':id+':') + 'waist';
+				this.NAME_LEFTARM		= ((id == null)?'':id+':') + 'leftArm';
+				this.NAME_LEFTFOREARM	= ((id == null)?'':id+':') + 'leftForearm';
+				this.NAME_LEFTHAND		= ((id == null)?'':id+':') + 'leftHand';
+				this.NAME_RIGHTARM		= ((id == null)?'':id+':') + 'rightArm';
+				this.NAME_RIGHTFOREARM	= ((id == null)?'':id+':') + 'rightForearm';
+				this.NAME_RIGHTHAND		= ((id == null)?'':id+':') + 'rightHand';
+				this.NAME_LEFTLEG		= ((id == null)?'':id+':') + 'leftLeg';
+				this.NAME_LEFTFORELEG	= ((id == null)?'':id+':') + 'leftForeleg';
+				this.NAME_LEFTFOOT		= ((id == null)?'':id+':') + 'leftFoot';
+				this.NAME_RIGHTLEG		= ((id == null)?'':id+':') + 'rightLeg';
+				this.NAME_RIGHTFORELEG	= ((id == null)?'':id+':') + 'rightForeleg';
+				this.NAME_RIGHTFOOT		= ((id == null)?'':id+':') + 'rightFoot';
+				this.NAME				= ((id == null)?'':id+':') + 'doll';
+				
+				this.data = [
+					this.NAME_HEAD,		this.NAME_BODY,			this.NAME_WAIST,
+					this.NAME_LEFTARM,	this.NAME_LEFTFOREARM,	this.NAME_LEFTHAND,	this.NAME_RIGHTARM,	this.NAME_RIGHTFOREARM,	this.NAME_RIGHTHAND,
+					this.NAME_LEFTLEG,	this.NAME_LEFTFORELEG,	this.NAME_LEFTFOOT,	this.NAME_RIGHTLEG,	this.NAME_RIGHTFORELEG,	this.NAME_RIGHTFOOT
+				];
+				
+				this.skin  = skin  ?? new THREE.MeshStandardMaterial({color: 0xddaa88});
+				this.shirt = shirt ?? new THREE.MeshStandardMaterial({color: 0xee3030});
+				this.pants = pants ?? new THREE.MeshStandardMaterial({color: 0x303030});
+				this.shoes = shoes ?? new THREE.MeshStandardMaterial({color: 0xcccccc});
+				this.doll = new THREE.Group();
+				this.sphere = new THREE.SphereGeometry(1);
+				this.all = new THREE.Group();
+				this.waist = this.createWaist();
+//				const axes = new THREE.AxesHelper(20)
+//				axes.layers.set(1);
+//				this.waist.add(axes);
+				this.waist.position.y = 0.87;
+				this.doll.add(this.waist);
+				this.object = this.doll;
+				this.setDefault(this.data);
+			}
+		}
+	
+		class Ball extends Animatable {
+			createTexture() {
+				const canvas = document.createElement('canvas');
+				canvas.width = 512;
+				canvas.height = 256;
+				const ctx = canvas.getContext('2d');
+				ctx.fillStyle = '#ffffff';
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+				ctx.fillStyle = '#804000';
+				ctx.fillRect(canvas.width*0/4, 0, canvas.width/4-10, canvas.height);
+				ctx.fillRect(canvas.width*1/4, 0, canvas.width/4-10, canvas.height);
+				ctx.fillRect(canvas.width*2/4, 0, canvas.width/4-10, canvas.height);
+				ctx.fillRect(canvas.width*3/4, 0, canvas.width/4-10, canvas.height);
+				const texture = new THREE.CanvasTexture(canvas);
+				return texture;
+			}
+			createBody() {
+				const name = this.NAME_BODY;
+				const g = new THREE.Group();
+				const m = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshStandardMaterial({color: 0xffffff, map: this.createTexture()}));
+				m.name = name;
+				m.scale.set(0.5, 1, 0.5);
+				g.add(m);
+				return g;
+			}
+			constructor(id = null) {
+				super();
+				this.NAME		= ((id == null)?'':id+':') + 'ball';
+				this.NAME_BODY	= ((id == null)?'':id+':') + 'body';
+				this.data = [ this.NAME_BODY ];
+				this.object = new THREE.Group();
+				this.body = this.createBody();
+//				const axes = new THREE.AxesHelper(20)
+//				axes.layers.set(1);
+//				this.body.add(axes);
+				this.body.position.set(0, 0.15, 0);
+				this.object.add(this.body);
+				this.setDefault(this.data);
+			}
+
+			getPart(name) {
+				switch (name) {
+				case this.NAME: 		return this.object;
+				case this.NAME_BODY: 	return this.body;
+				}
+				return null;
+			}
+			getObject() { return this.object; }
+		}
+		
+		class Tee extends Animatable {
+			createBody() {
+				const name = this.NAME_BODY;
+				const g = new THREE.Group();
+				const points = [];
+				[[6,4], [4,4], [5,0], [7,0], [6,4]].forEach(([x,y]) => points.push(new THREE.Vector2(x, y)));
+				const geo = new THREE.LatheGeometry(points, 64);
+				
+				const positions = geo.attributes.position.array;
+				for (let i = 0; i < positions.length; i += 3) {
+					let [x, y, z] = [positions[i], positions[i+1], positions[i+2]];
+					if (y > 1) { y += Math.sin(Math.atan2(z, x)*6)*2/3; }
+					[positions[i], positions[i+1], positions[i+2]] = [x, y, z];
+				}
+				geo.computeVertexNormals();
+				geo.attributes.position.needsUpdate = true;
+				
+				
+				const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({color: 0x505050}));
+				m.scale.set(0.01, 0.01, 0.01);
+				m.name = name;
+				m.position.set(0, 0.02, 0);
+				g.add(m);
+				return g;
+			}
+			constructor(id = null) {
+				super();
+				this.NAME		= ((id == null)?'':id+':') + 'tee';
+				this.NAME_BODY	= ((id == null)?'':id+':') + 'body';
+				this.data = [ this.NAME_BODY ];
+				this.object = new THREE.Group();
+				this.body = this.createBody();
+				this.body.position.set(0, 0, 0);
+				this.object.add(this.body);
+				this.setDefault(this.data);
+			}
+
+			getPart(name) {
+				switch (name) {
+				case this.NAME: 		return this.object;
+				case this.NAME_BODY: 	return this.body;
+				}
+				return null;
+			}
+			getObject() { return this.object; }
+		}
+		
+		class Setting {
+			constructor() {
+				this.ids = ['rugger', 'ball', 'tee'];
+				this.object = new THREE.Group();
+				const rugger = new Rugger('rugger');
+				const ball = new Ball('ball');
+				const tee = new Tee('tee');
+				this.object.add(rugger.getObject(), ball.getObject(), tee.getObject());
+				this.characters = [rugger, ball, tee];
+			}
+			size() { return this.ids.length; }
+			getObject() { return this.object; }
+			getId(partName)						{ return (partName != null)?partName.substring(0, partName.indexOf(':')):this.ids[0]; }
+			move(partName, command, delta)		{ this.characters[this.ids.indexOf(this.getId(partName))].move(partName, command, delta); }
+			movePart(partName, command, delta)	{ this.characters[this.ids.indexOf(this.getId(partName))].movePart(partName, command, delta); }
+			getPartParameter(partName)			{ return this.characters[this.ids.indexOf(this.getId(partName))].getPartParameter(partName); }
+			getMoveParameter(partName)			{ return this.characters[this.ids.indexOf(this.getId(partName))].getMoveParameter(); }
+			getAllParameter() {
+				const ret = [];
+				this.characters.forEach((doll) => ret.push(doll.getAllParameter()));
+				return ret;
+			}
+			setAllParameter(param) {
+				for (let i = 0; i < this.characters.length; ++i) { this.characters[i].setAllParameter(param[i]); }
+			}
+			addAllParameter(param, delta) {
+				for (let i = 0; i < this.characters.length; ++i) { this.characters[i].addAllParameter(param[i], delta); }
+			}
+		}
+		
+		let controlParameter = {part: null, rx: 0, ry: 0, rz: 0, mx: 0, my: 0, mz: 0};
+		function reflect() {
+			if (!EDIT_MODE) { return; }
+			function normalize(value) { return Math.round(value); }
+			document.getElementById('label').textContent = '(No select)';
+			if (controlParameter.part !== null) {
+				const param = setting.getPartParameter(controlParameter.part); 
+				if (param === null) { return; }
+				document.getElementById('label').textContent = controlParameter.part;
+				controlParameter.rx = param.rx; document.getElementById('dispRX').textContent = normalize(param.rx);
+				controlParameter.ry = param.ry;	document.getElementById('dispRY').textContent = normalize(param.ry);
+				controlParameter.rz = param.rz;	document.getElementById('dispRZ').textContent = normalize(param.rz);
+				controlParameter.mx = param.mx;	document.getElementById('dispMX').textContent = normalize(param.mx);
+				controlParameter.my = param.my;	document.getElementById('dispMY').textContent = normalize(param.my);
+				controlParameter.mz = param.mz;	document.getElementById('dispMZ').textContent = normalize(param.mz);
+			}
+		}
+		
+		const pattern = [];
+		let editIndex = -1;
+		let animationScale = 0;
+
+		function getEditIndex()		{ return editIndex; }
+		function setEditIndex(no)	{ editIndex = no; refreshTable(no); }
+		let editIndexBackup;
+		
+		const setting = new Setting();
+		const P_DEFAULT = setting.getAllParameter();
+		const scheduler = new Scheduler(setting);
+		scheduler.setListener((type, no) => {
+			if		(type === 'index')	{ refreshTable(no); }
+			else if (type === 'object')	{ reflect(); }
+		});
+
+		function getScenarioData(no) {
+			const tr = document.getElementById('pat'+(no+1));
+			if (tr == null) { return null; }
+			const checked	= tr.querySelector('#check').checked;
+			const duration	= Math.max(1, Number(tr.querySelector('#duration').value));
+			const wait		= Math.max(0, Number(tr.querySelector('#wait').value));
+			return {checked: checked, pattern: pattern[no], duration: duration, wait: wait};
+		}
+
+		function createElement(type, attributes = null, text = null) {
+			function setAttributes(tag, attributes) { attributes.forEach((attribute) => tag.setAttribute(attribute[0], attribute[1])); }
+			const element = document.createElement(type);
+			if (attributes != null) { setAttributes(element, attributes); }
+			if (text != null) { element.textContent = text; }
+			return element;
+		}
+
+		function createScenarioDiv() {
+			function getDefaultData() { return {checked: false, pattern: P_DEFAULT, duration: 40, wait: 20}; }
+			function getScenario() {
+				const scenario = [];
+				for (let i = 0; i < MAX_SCENARIO_LINE; ++i) {
+					const line = getScenarioData(i);
+					scenario.push({checked: line.checked, pattern: line.pattern, duration: line.duration, wait: line.wait});
+				}
+				return scenario;
+			}
+			function setScenarioData(no, data) {
+				const tr = document.getElementById('pat'+(no+1));
+				if (tr == null) { return; }
+				pattern[no] = data.pattern;
+				tr.querySelector('#check').checked = data.checked;
+				if (data.duration >= 0) { tr.querySelector('#duration').value = data.duration; }
+				if (data.wait >= 0)		{ tr.querySelector('#wait').value = data.wait; }
+			}
+
+			function getSpeedControlTable() {
+				const table = createElement('table', [['width', '100%']]);
+				const tr = createElement('tr');
+				const td1 = createElement('td');
+				
+				const playButton = createElement('button', [['id', 'play']], '\u25b6');
+				playButton.addEventListener('click', () => {
+					if (scheduler.isRunning()) { return; }
+					scheduler.setScenario(getScenario());
+					animationScale = 0;
+					scheduler.setScale(animationScale);
+					const no = (event.shiftKey)?getEditIndex():0;
+					scheduler.run(no);
+				});
+				td1.append(playButton);
+				td1.append(' ');
+
+				const fastButton = createElement('button', [['id', 'fast']], '>>');
+				fastButton.addEventListener('click', () => {
+					if (!scheduler.isRunning()) { return; }
+					animationScale = Math.max(-2, animationScale-1);
+					scheduler.setScale(animationScale);
+				});
+				td1.append(fastButton);
+				td1.append(' ');
+				
+				const slowButton = createElement('button', [['id', 'slow']], '<<');
+				slowButton.addEventListener('click', () => {
+					if (!scheduler.isRunning()) { return; }
+					animationScale = Math.min(2, animationScale+1);
+					scheduler.setScale(animationScale);
+				});
+				td1.append(slowButton);
+				tr.append(td1);
+				
+				const td2 = createElement('td', [['class', 'align-right']]);
+				const pauseButton = createElement('button', [['id', 'pause']], '\u23f8');
+				pauseButton.addEventListener('click', () => {
+					if (scheduler.isRunning()) { scheduler.pause(); }
+				});
+				td2.append(pauseButton);
+				td2.append(' ');
+				
+				const stopButton = createElement('button', [['id', 'stop']], '\u23f9');
+				stopButton.addEventListener('click', () => {
+					if (scheduler.isRunning()) { scheduler.stop(); }
+				});
+				td2.append(stopButton);
+				tr.append(td2);
+				table.append(tr);
+				return table;
+			}
+
+			function getScenarioTable() {
+				const div = createElement('div', [['class', 'scroll-box']]);
+				const table = createElement('table', [['id', 'scenario-table']]);
+				for (let i = 0; i < MAX_SCENARIO_LINE; ++i) {
+					pattern.push(P_DEFAULT);
+					const tr = createElement('tr', [['id', 'pat'+(i+1)]]);
+					tr.append(createElement('td', [['class', 'number']], i));
+					let td = createElement('td');
+					td.appendChild(createElement('input', [['id', 'check'], ['type', 'checkBox']]));
+					tr.appendChild(td);
+					td = createElement('td');
+					const bRegist = createElement('button', [['id', 'regist']], 'R');
+					bRegist.addEventListener('click', () => {
+						if (scheduler.isRunning()) { return; }
+						if (editIndex !== i && getScenarioData(i).checked) {
+							if (!window.confirm("登録しますか？")) { return; }
+						}
+						setScenarioData(i, {checked: true, pattern: setting.getAllParameter(), duration: -1, wait: -1});
+						setEditIndex(i);
+					});
+					td.appendChild(bRegist);
+					tr.appendChild(td);
+					td = createElement('td');
+					const bShow = createElement('button', [['id', 'show']], 'V');
+					bShow.addEventListener('click', () => {
+						if (scheduler.isRunning()) { return; }
+						const scenario = getScenario();
+						for (let j = 0; j < scenario.length; ++j) { scenario[j].checked = (i == j)?true:false; }
+						scheduler.setScenario(scenario);
+						scheduler.run(i);
+						setEditIndex(i);
+					});
+					td.appendChild(bShow);
+					tr.appendChild(td);
+					td = createElement('td');
+					td.appendChild(createElement('input', [['id', 'duration'], ['style', 'width: 2em;'], ['class', 'number'], ['value', DURATION_DEFAULT]]));
+					tr.appendChild(td);
+					td = createElement('td');
+					td.appendChild(createElement('input', [['id', 'wait'], ['style', 'width: 2em;'], ['class', 'number'], ['value', WAIT_DEFAULT]]));
+					tr.appendChild(td);
+					table.appendChild(tr);
+				}
+				div.append(table);
+				return div;
+			}
+			
+			function getOtherTable() {
+				const table = createElement('table', [['width', '100%']]);
+				const tr = createElement('tr');
+				const td1 = createElement('td');
+				const saveButton = createElement('button', [['id', 'save']], 'Save');
+				saveButton.addEventListener('click', async () => {
+					if (scheduler.isRunning()) { return; }
+					const scenario = getScenario();
+					let json = `{\n  "version": 2,\n  "data": [`;
+					for (let i = 0; i < scenario.length; ++i) {
+						json += '\n    ' + JSON.stringify(scenario[i], (key, value) => { return (typeof value === 'number')?Math.round(value*100)/100:value; });
+						if (i !== scenario.length-1) { json += ','; }
+					}
+					json += `\n  ]\n}`;
+					const handle = await window.showSaveFilePicker({suggestedName: "doll.json", types: [{accept: {"application/json": [".json"]}}]});
+					const writable = await handle.createWritable();
+					await writable.write(json);
+					await writable.close();
+				});
+				td1.append(saveButton);
+				td1.append(' ');
+				
+				const loadButton = createElement('button', [['id', 'load']], 'Load');
+				loadButton.addEventListener('click', async () => {
+					function update0_1(json) {
+						function update(pattern) {
+							// radian -> degree, m -> cm
+							for (let key in pattern) {
+								if		(key === 'rx' || key === 'ry' || key === 'rz') { pattern[key] = Math.trunc(Number(pattern[key])/Math.PI*180); }
+								else if (key === 'mx' || key === 'my' || key === 'mz') { pattern[key] = Math.trunc(Number(pattern[key])*100); }
+							}
+						}
+						
+						for (let i = 0; i < Math.min(MAX_SCENARIO_LINE, json.data.length); ++i) {
+							const line = json.data[i];
+							if (line.pattern.every(Array.isArray)) {
+								line.pattern.forEach((patternSet) => { patternSet.forEach((pattern) => update(pattern)); });
+							}
+							else { line.pattern.forEach((pattern) => update(pattern)); }
+						}
+					}
+					function update1_2(json) {
+						// add mx, my, mz for each parts, remove doll and mx,my,mz to waist
+						function update(patternSet) {
+							let dollIndex = -1;
+							patternSet.forEach((pattern, index) => {
+								if (pattern.name.endsWith('doll')) { dollIndex = index; }
+							});
+							if (dollIndex < 0) { throw new Error('format error'); }
+							patternSet.forEach((pattern) => {
+								if (pattern.name.endsWith('waist')) {
+									pattern['mx'] = patternSet[dollIndex]['mx'];
+									pattern['my'] = patternSet[dollIndex]['my'];
+									pattern['mz'] = patternSet[dollIndex]['mz'];
+								}
+								else {
+									pattern['mx'] = 0;
+									pattern['my'] = 0;
+									pattern['mz'] = 0;
+								}
+							});
+							patternSet.splice(dollIndex, 1);
+						}
+						
+						for (let i = 0; i < Math.min(MAX_SCENARIO_LINE, json.data.length); ++i) {
+							const line = json.data[i];
+							if (line.pattern.every(Array.isArray)) { line.pattern.forEach((patternSet) => update(patternSet)); }
+							else { update(line.pattern); }
+						}
+						
+					}
+					if (scheduler.isRunning()) { return; }
+					const [handle] = await window.showOpenFilePicker({types: [{description: "JSON Files", accept: {"application/json": [".json"]}}], multiple: false});
+					const file = await handle.getFile();
+					const json = JSON.parse(await file.text());
+					const version = json.version??'0';
+					
+					if		(version === 0) { update0_1(json); update1_2(json); }
+					else if (version === 1) { update1_2(json); }
+
+					for (let i = 0; i < Math.min(MAX_SCENARIO_LINE, json.data.length); ++i) {
+						const line = json.data[i];
+						setScenarioData(i, {checked: line.checked, pattern: line.pattern, duration: line.duration, wait: line.wait});
+					}
+
+					editIndex = -1;
+				});
+				td1.append(loadButton);
+				tr.append(td1);
+				
+				const td2 = createElement('td', [['class', 'align-right']]);
+				const insertButton = createElement('button', [['id', 'insert']], 'Ins');
+				td2.append(insertButton);
+				insertButton.addEventListener('click', () => {
+					if (scheduler.isRunning()) { return; }
+					const editIndex = getEditIndex();
+					if (editIndex < 0) { return; }
+					for (let i = MAX_SCENARIO_LINE-1; i > editIndex; --i) {
+						const line = getScenarioData(i-1);
+						setScenarioData(i, line);
+					}
+					setScenarioData(editIndex, getDefaultData());
+				});
+				td2.append(' ');
+
+				const deleteButton = createElement('button', [['id', 'delete']], 'Del');
+				deleteButton.addEventListener('click', () => {
+					if (scheduler.isRunning()) { return; }
+					const editIndex = getEditIndex();
+					if (editIndex < 0) { return; }
+					for (let i = editIndex; i < MAX_SCENARIO_LINE-1; ++i) {
+						const line = getScenarioData(i+1);
+						setScenarioData(i, line);
+					}
+				});
+				td2.append(deleteButton);
+				tr.append(td2);
+				table.append(tr);
+				return table;
+			}
+			
+			const div = document.getElementById('scenario-div');
+			div.append(getSpeedControlTable());
+			div.append(getScenarioTable());
+			div.append(getOtherTable());
+		}
+		function createScenarioDivForPlayOnly() {
+			function getSpeedControlTable() {
+				const table = createElement('table', [['width', '100%']]);
+				const tr = createElement('tr');
+				const td1 = createElement('td');
+				
+				const playButton = createElement('button', [['id', 'play']], '\u25b6');
+				playButton.addEventListener('click', () => {
+					if (scheduler.isRunning()) { return; }
+					scheduler.setScenario(SCENARIO_MAIN);
+					animationScale = 0;
+					scheduler.setScale(animationScale);
+					scheduler.run(0);
+				});
+				td1.append(playButton);
+				td1.append(' ');
+
+				const fastButton = createElement('button', [['id', 'fast']], '>>');
+				fastButton.addEventListener('click', () => {
+					if (!scheduler.isRunning()) { return; }
+					animationScale = Math.max(-2, animationScale-1);
+					scheduler.setScale(animationScale);
+				});
+				td1.append(fastButton);
+				td1.append(' ');
+				
+				const slowButton = createElement('button', [['id', 'slow']], '<<');
+				slowButton.addEventListener('click', () => {
+					if (!scheduler.isRunning()) { return; }
+					animationScale = Math.min(2, animationScale+1);
+					scheduler.setScale(animationScale);
+				});
+				td1.append(slowButton);
+				tr.append(td1);
+				
+				const td2 = createElement('td', [['class', 'align-right']]);
+				const pauseButton = createElement('button', [['id', 'pause']], '\u23f8');
+				pauseButton.addEventListener('click', () => {
+					if (scheduler.isRunning()) { scheduler.pause(); }
+				});
+				td2.append(pauseButton);
+				td2.append(' ');
+				
+				const stopButton = createElement('button', [['id', 'stop']], '\u23f9');
+				stopButton.addEventListener('click', () => {
+					if (scheduler.isRunning()) { scheduler.stop(); }
+				});
+				td2.append(stopButton);
+				tr.append(td2);
+				table.append(tr);
+				return table;
+			}
+
+			const div = document.getElementById('scenario-div');
+			div.append(getSpeedControlTable());
+		}
+		function createControlDiv() {
+			function getLabel() { return createElement('label', [['id', 'label']], '(No select)'); }
+			function getControlTable() {
+				const table = createElement('table', [['id', 'rotate-control']]);
+				CONTROL_PARAMETERS.forEach((cp) => {
+					const tr = createElement('tr');
+					tr.append(createElement('th', [], cp.label));
+					tr.append(createElement('td', [['class', 'number'], ['id', cp.dispId], ['style', 'width: 3em;']], cp.initValue));
+					tr.append(createElement('td', [['style', 'width: 0.2em;']]));
+					cp.steps.forEach((step) => {
+						const td = createElement('td');
+						const button = createElement('button', [], `${(step>0)?'+'+step:step}`);
+						button.addEventListener('click', (event) => {
+							event.stopPropagation();
+							controlParameter[cp.index] = Math.min(Math.max(cp.min, controlParameter[cp.index]+step), cp.max);
+							setting.movePart(controlParameter.part, cp.label, controlParameter[cp.index]);
+							reflect();
+						});
+						td.append(button);
+						tr.append(td);
+					});
+					const td = createElement('td');
+					const button = createElement('button', [], 'Reset');
+					button.addEventListener('click', (event) => {
+						console.log('clicked',cp.initValue);
+						event.stopPropagation();
+						controlParameter[cp.index] = cp.initValue;
+						setting.movePart(controlParameter.part, cp.label, controlParameter[cp.index]);
+						reflect();
+					});
+					td.append(button);
+					tr.append(td);
+					table.append(tr);
+				});
+				
+				return table;
+			}
+			
+			function getCameraControlTable() {
+				const table = createElement('table');
+				const tr = createElement('tr');
+				tr.append(createElement('th', [], 'Camera'));
+				tr.append(createElement('td', [['style', 'width: 0.5em;']]));
+				CAMERA_CONTROL_PARAMETERS.forEach((elem) => {
+					const td = createElement('td');
+					if (elem.dir === null) { tr.append(createElement('td', [['style', 'width: 0.2em;']])); }
+					else {
+						const button = createElement('button', [], elem.dir);
+						button.addEventListener('click', (event) => {
+							event.stopPropagation();
+							camera.position.set(elem.position[0], elem.position[1], elem.position[2]);
+							controls.update();
+						});
+						td.append(button);
+						tr.append(td);
+					}
+				})
+				table.append(tr);
+				return table;
+			}
+			
+			const div = document.getElementById('control-div');
+			div.append(getLabel());
+			div.append(getControlTable());
+			div.append(createElement('br'));
+			div.append(getCameraControlTable());
+		}
+		if (EDIT_MODE) { createControlDiv();  createScenarioDiv(); }
+		else { createScenarioDivForPlayOnly(); }
+
+		function refreshTable(runIndex) {
+			if (!EDIT_MODE) { return; }
+			for (let i = 0; i < MAX_SCENARIO_LINE; ++i) { document.getElementById('pat'+(i+1)).classList.remove('edit', 'run'); }
+			if (scheduler.isRunning())			{ document.getElementById('pat'+(runIndex+1)).classList.add('run'); }
+			else if (getEditIndex() >= 0)	{ document.getElementById('pat'+(getEditIndex()+1)).classList.add('edit'); }
+		}
+		
+		const scene = new THREE.Scene();
+		function addLights(scene) {
+			const directionLight = new THREE.DirectionalLight(0xffffff, 3);
+			directionLight.position.set(1,1,1);
+			scene.add(directionLight);
+			const ambientLight = new THREE.AmbientLight(0x999999, 2);
+			scene.add(ambientLight);
+		}
+		addLights(scene);
+		
+		function addGrid(scene) {
+			const grid   = new THREE.GridHelper(4, 16, 0x888888, 0x888888);
+			grid.layers.set(1);
+			const grid11 = grid.clone();
+			const grid12 = grid.clone();
+			const grid13 = grid.clone();
+			const grid14 = grid.clone();
+			const grid21 = grid.clone();
+			const grid22 = grid.clone();
+			const grid31 = grid.clone();
+			const grid32 = grid.clone();
+			const grid41 = grid.clone();
+			const grid42 = grid.clone();
+			grid11.position.set(-2, 0, -2);
+			grid12.position.set(-2, 0,  2);
+			grid13.position.set( 2, 0, -2);
+			grid14.position.set( 2, 0,  2);
+			grid21.rotation.x = Math.PI/2; grid21.position.set(-2,  2, -4);
+			grid22.rotation.x = Math.PI/2; grid22.position.set( 2,  2, -4);
+			grid31.rotation.z = Math.PI/2; grid31.position.set( 4,  2, -2);
+			grid32.rotation.z = Math.PI/2; grid32.position.set( 4,  2,  2);
+			grid41.rotation.z = Math.PI/2; grid41.position.set(-4,  2, -2);
+			grid42.rotation.z = Math.PI/2; grid42.position.set(-4,  2,  2);
+			scene.add(grid11, grid12, grid13, grid14, grid21, grid22, grid31, grid32, grid41, grid42);
+		}
+//		addGrid(scene);
+		
+		const obj = setting.getObject();
+		obj.position.set(-30, 0, 25);
+		scene.add(obj);
+		
+		function getGround() {
+			function getGoal() {
+				const goal = new THREE.Group();
+				const pole1 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 9), new THREE.MeshStandardMaterial({color: 0xffffff}));
+				const pole2 = pole1.clone();
+				pole1.position.set(-5.6/2, 4.5, 0);
+				pole2.position.set( 5.6/2, 4.5, 0);
+				const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 5.6), new THREE.MeshStandardMaterial({color: 0xffffff}));
+				bar.rotation.z = Math.PI/2;
+				bar.position.set(0, 3, 0)
+				goal.add(pole1, pole2, bar);
+				return goal;
+			}
+			function getTexture() {
+				const canvas = document.createElement('canvas');
+				canvas.width  = 2048;
+				canvas.height = 1024;
+				const ctx = canvas.getContext('2d');
+				ctx.fillStyle = '#40c020';
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+				const offset = 30;
+				const W = canvas.width - offset*2;
+				const H = canvas.height - offset*2;
+				ctx.beginPath();
+				ctx.moveTo(offset,		offset);
+				ctx.lineTo(offset + W,	offset);
+				ctx.lineTo(offset + W,	offset + H);
+				ctx.lineTo(offset,		offset + H);
+				ctx.closePath();
+
+				ctx.moveTo(offset + W*0.5, offset);
+				ctx.lineTo(offset + W*0.5, offset + H);
+				ctx.moveTo(offset + W*0.13, offset);
+				ctx.lineTo(offset + W*0.13, offset + H);
+				ctx.moveTo(offset + W*0.3, offset);
+				ctx.lineTo(offset + W*0.3, offset + H);
+				ctx.moveTo(offset + W*0.7, offset);
+				ctx.lineTo(offset + W*0.7, offset + H);
+				ctx.moveTo(offset + W*0.87, offset);
+				ctx.lineTo(offset + W*0.87, offset + H);
+
+				ctx.strokeStyle = '#ffffff';
+				ctx.lineWidth = 1;
+				ctx.stroke();
+
+				const texture = new THREE.CanvasTexture(canvas);
+//				texture.minFilter = THREE.NearestFilter;
+//				texture.magFilter = THREE.NearestFilter;
+				return texture;
+			}
+			const goal1 = getGoal();
+			goal1.rotation.y = Math.PI/2;
+			goal1.position.set(-50, 0, 0);
+			const goal2 = getGoal();
+			goal2.rotation.y = Math.PI/2;
+			goal2.position.set( 50, 0, 0);
+			const ground = new THREE.Group();
+			const texture0 = new THREE.MeshStandardMaterial({color: 0x408010});
+			const texture1 = new THREE.MeshStandardMaterial({color: 0xffffff, map: getTexture()});
+			const field = new THREE.Mesh(new THREE.BoxGeometry(144, 0.1, 72), [texture0, texture0, texture1, texture0, texture0, texture0]);
+			field.position.y = -0.05;
+			ground.add(field, goal1, goal2);
+			return ground;
+		}
+		scene.add(getGround());
+
+		const camera = new THREE.PerspectiveCamera(50, getWidth()/getHeight(), 0.1, 1000);
+		camera.layers.enable(1);
+		camera.position.set(-24, 2, 28);
+		const renderer = new THREE.WebGLRenderer();
+		renderer.setSize(getWidth(), getHeight());
+		renderer.setClearColor(0xa0a0ff);
+		
+		const controls = new OrbitControls(camera, renderer.domElement);
+		Object.assign(controls, {rotateSpeed: 0.1, enableDamping: true, dampingFactor: 0.05});
+		controls.minPolarAngle = 0;
+		controls.maxPolarAngle = Math.PI/2;
+		controls.target.set(-46, 1, 10);
+		canvas.appendChild(renderer.domElement);
+		controls.update();
+		
+		const raycaster = new THREE.Raycaster();
+		raycaster.layers.set(0);
+		const mouse = new THREE.Vector2();
+		window.addEventListener('click', (event) => {
+			mouse.x =  (event.clientX / getWidth())  * 2 - 1;
+			mouse.y = -(event.clientY / getHeight()) * 2 + 1;
+			raycaster.setFromCamera(mouse, camera);
+//			scene.add(new THREE.ArrowHelper(raycaster.ray.direction, raycaster.ray.origin, 300, 0xff0000));
+//			console.log('clicked');
+			const intersects = raycaster.intersectObjects(scene.children, true);
+			if (intersects.length <= 0) { return; }
+			const hit = intersects[0].object;
+//			console.log(hit);
+			if (hit.name == null || hit.name.length == 0) {return; }
+			const param = setting.getPartParameter(hit.name);
+			if (param == null || param == undefined) { return; }
+			controlParameter.part = hit.name;
+			reflect();
+		});
+
+		window.addEventListener("resize", () => {
+			camera.aspect = getWidth() / getHeight();
+			camera.updateProjectionMatrix();
+			renderer.setSize(getWidth(), getHeight());
+			renderer.setPixelRatio(window.devicePixelRatio);
+			renderer.render(scene, camera);
+		});
+
+		const SCENARIO_SETUP = [
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":-20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":53,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":44,"my":-42,"mz":48},{"name":"rugger:leftArm","rx":-80,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-11,"ry":0,"rz":-18,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-78,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":18,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-100,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":93,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":12,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-40,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":138,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":15,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":1,"wait":60},
+		];
+		const SCENARIO_MAIN = [
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":-20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":53,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":44,"my":-42,"mz":48},{"name":"rugger:leftArm","rx":-80,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-11,"ry":0,"rz":-18,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-78,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":18,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-100,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":93,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":12,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-40,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":138,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":15,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":1,"wait":60},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":-20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":33,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":44,"my":-28,"mz":48},{"name":"rugger:leftArm","rx":-50,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-11,"ry":0,"rz":-18,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-48,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":18,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-80,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":73,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":12,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-30,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":108,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":-45,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":38,"my":-6,"mz":41},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-31,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":13,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":19,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":19,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":11,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":-25,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":30,"my":-2,"mz":33},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-21,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":13,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":16,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":16,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":31,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":-19,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":20,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":20,"my":0,"mz":21},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":20,"wait":60},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-78,"rz":0,"mx":34,"my":0,"mz":48},{"name":"rugger:leftArm","rx":10,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-10,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-40,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":40,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":-13,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":-40,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":20,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-18,"rz":0,"mx":46,"my":0,"mz":64},{"name":"rugger:leftArm","rx":20,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-20,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-30,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":30,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":30,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":20,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":38,"rz":0,"mx":60,"my":0,"mz":71},{"name":"rugger:leftArm","rx":-10,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":10,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-30,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":20,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":38,"rz":0,"mx":100,"my":0,"mz":121},{"name":"rugger:leftArm","rx":20,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-20,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-30,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":38,"rz":0,"mx":140,"my":0,"mz":171},{"name":"rugger:leftArm","rx":-20,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":20,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":10,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-30,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":38,"rz":0,"mx":180,"my":0,"mz":221},{"name":"rugger:leftArm","rx":20,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-20,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-30,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":38,"rz":0,"mx":220,"my":0,"mz":271},{"name":"rugger:leftArm","rx":-20,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":20,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":10,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-30,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":-70,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-50,"rz":0,"mx":240,"my":0,"mz":291},{"name":"rugger:leftArm","rx":-20,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":20,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":10,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":10,"ry":-40,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-140,"rz":0,"mx":223,"my":0,"mz":308},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":30},
+    {"checked":false,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":20},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":-20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-140,"rz":0,"mx":223,"my":0,"mz":308},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":60},
+    {"checked":false,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":20},
+    {"checked":false,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":20},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-140,"rz":0,"mx":223,"my":0,"mz":308},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":5,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":60},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":220,"my":-1,"mz":281},{"name":"rugger:leftArm","rx":60,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-60,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-50,"ry":0,"rz":-15,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-60,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-30,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":20,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":160,"my":-1,"mz":211},{"name":"rugger:leftArm","rx":-40,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-60,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":50,"ry":0,"rz":-15,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-60,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":20,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-30,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":20,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":100,"my":-1,"mz":141},{"name":"rugger:leftArm","rx":60,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-60,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-50,"ry":0,"rz":-15,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-60,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-30,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":20,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":50,"my":-1,"mz":81},{"name":"rugger:leftArm","rx":-40,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-60,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":50,"ry":0,"rz":-15,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-60,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":30,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":20,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":10,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":0,"my":-1,"mz":21},{"name":"rugger:leftArm","rx":60,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-60,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-50,"ry":0,"rz":-15,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-60,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-20,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":20,"wait":0},
+    {"checked":false,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":20},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":30,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-10,"my":-1,"mz":11},{"name":"rugger:leftArm","rx":20,"ry":0,"rz":36,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-20,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-30,"ry":0,"rz":-35,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-20,"ry":0,"rz":-20,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-20,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":30,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":60,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":73,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":20,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":30,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-10,"my":-1,"mz":11},{"name":"rugger:leftArm","rx":20,"ry":0,"rz":36,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-20,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-30,"ry":0,"rz":-35,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-20,"ry":0,"rz":-20,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":-20,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":30,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-7,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":37,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":20,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-1,"my":0,"mz":-1}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":10,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":10,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-14,"my":0,"mz":11},{"name":"rugger:leftArm","rx":20,"ry":0,"rz":36,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-20,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-30,"ry":0,"rz":-35,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-20,"ry":0,"rz":-20,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-63,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":13,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":51,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":10,"rz":30,"mx":-51,"my":40,"mz":-59}],[{"name":"tee:body","rx":-60,"ry":0,"rz":40,"mx":-30,"my":20,"mz":-20}]],"duration":10,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-14,"my":0,"mz":11},{"name":"rugger:leftArm","rx":20,"ry":0,"rz":36,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-20,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-30,"ry":0,"rz":-35,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-20,"ry":0,"rz":-20,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-103,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":3,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":31,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":20,"rz":30,"mx":-101,"my":100,"mz":-119}],[{"name":"tee:body","rx":-120,"ry":0,"rz":80,"mx":-40,"my":30,"mz":-40}]],"duration":10,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-14,"my":0,"mz":11},{"name":"rugger:leftArm","rx":20,"ry":0,"rz":36,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-20,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-30,"ry":0,"rz":-35,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-20,"ry":0,"rz":-20,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-123,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":3,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":31,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":30,"rz":30,"mx":-151,"my":150,"mz":-179}],[{"name":"tee:body","rx":-180,"ry":0,"rz":120,"mx":-60,"my":20,"mz":-60}]],"duration":10,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":-10,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-14,"my":0,"mz":11},{"name":"rugger:leftArm","rx":20,"ry":0,"rz":36,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-20,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":-30,"ry":0,"rz":-35,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-20,"ry":0,"rz":-20,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":-73,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":3,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":21,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":50,"rz":30,"mx":-231,"my":220,"mz":-289}],[{"name":"tee:body","rx":-180,"ry":0,"rz":0,"mx":-80,"my":7,"mz":-80}]],"duration":20,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":-10,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-14,"my":0,"mz":11},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":-10,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":3,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":100,"rz":30,"mx":-451,"my":320,"mz":-509}],[{"name":"tee:body","rx":-180,"ry":0,"rz":0,"mx":-80,"my":10,"mz":-80}]],"duration":40,"wait":0},
+    {"checked":false,"pattern":[[{"name":"rugger:head","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"tee:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}]],"duration":40,"wait":20},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":-10,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-14,"my":0,"mz":11},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":-10,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":3,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":200,"rz":30,"mx":-601,"my":410,"mz":-719}],[{"name":"tee:body","rx":-180,"ry":0,"rz":0,"mx":-80,"my":10,"mz":-80}]],"duration":50,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":-10,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-14,"my":0,"mz":11},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":-10,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":3,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":500,"rz":30,"mx":-1001,"my":540,"mz":-1319}],[{"name":"tee:body","rx":-180,"ry":0,"rz":0,"mx":-80,"my":10,"mz":-80}]],"duration":100,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":1,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-14,"my":0,"mz":11},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":-10,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":3,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":700,"rz":30,"mx":-1401,"my":560,"mz":-1919}],[{"name":"tee:body","rx":-180,"ry":0,"rz":0,"mx":-80,"my":10,"mz":-80}]],"duration":100,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":-3,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-14,"my":0,"mz":11},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":-10,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":3,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":900,"rz":30,"mx":-1901,"my":410,"mz":-2709}],[{"name":"tee:body","rx":-180,"ry":0,"rz":0,"mx":-80,"my":10,"mz":-80}]],"duration":140,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-14,"my":0,"mz":11},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":-10,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":3,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-2301,"my":10,"mz":-3509}],[{"name":"tee:body","rx":-180,"ry":0,"rz":0,"mx":-80,"my":10,"mz":-80}]],"duration":140,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-14,"my":0,"mz":11},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":-10,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":3,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-2501,"my":150,"mz":-3809}],[{"name":"tee:body","rx":-180,"ry":0,"rz":0,"mx":-80,"my":10,"mz":-80}]],"duration":100,"wait":0},
+    {"checked":true,"pattern":[[{"name":"rugger:head","rx":0,"ry":-10,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:body","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:waist","rx":0,"ry":-138,"rz":0,"mx":-14,"my":0,"mz":11},{"name":"rugger:leftArm","rx":0,"ry":0,"rz":10,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightArm","rx":0,"ry":0,"rz":-10,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForearm","rx":-10,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightHand","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftLeg","rx":0,"ry":2,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftForeleg","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:leftFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightLeg","rx":0,"ry":0,"rz":-4,"mx":0,"my":0,"mz":0},{"name":"rugger:rightForeleg","rx":3,"ry":0,"rz":0,"mx":0,"my":0,"mz":0},{"name":"rugger:rightFoot","rx":0,"ry":0,"rz":0,"mx":0,"my":0,"mz":0}],[{"name":"ball:body","rx":-50,"ry":0,"rz":30,"mx":-2701,"my":10,"mz":-4109}],[{"name":"tee:body","rx":-180,"ry":0,"rz":0,"mx":-80,"my":10,"mz":-80}]],"duration":100,"wait":0},
+		];
+		if (!EDIT_MODE) {
+			scheduler.setScenario(SCENARIO_SETUP);
+			scheduler.run(0);
+		}
+		
+		function animate() {
+			renderer.setSize(getWidth(), getHeight());
+			renderer.render(scene, camera);
+			scheduler.animate();
+			requestAnimationFrame(animate);
+		}
+
+		animate();
+		</script>
+	</body>
+</html>
