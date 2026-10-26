@@ -107,7 +107,7 @@
 			
 			getRoadGeometry() {
 				const radialSegments = 8;
-				const g = new THREE.TubeGeometry(this.#COURSE, 2000, 1.5, radialSegments);
+				const g = new THREE.TubeGeometry(this.#COURSE, 2000, 2.2, radialSegments);
 				const positions = g.attributes.position.array;
 				for (let i = 0; i < positions.length; i += 3*(radialSegments+1)) {
 					const h = this.#UP_DOWN.getPoint(i/positions.length);
